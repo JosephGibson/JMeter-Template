@@ -1,0 +1,28 @@
+# JMeter run artifacts
+results/
+*/results/
+*.jtl
+jmeter.log
+*.log
+
+# JMeter GUI backups
+*.jmx.bak
+*.jmx.bak.*
+
+# Java / IDE
+*.class
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Archives produced by launcher
+results/*.zip
+*/results/*.zip

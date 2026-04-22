@@ -1,0 +1,18 @@
+# Run artifacts — never useful as context
+results/
+*/results/
+*.jtl
+*.zip
+jmeter.log
+*.log
+
+# JMeter backups
+*.jmx.bak
+*.jmx.bak.*
+
+# IDE / OS noise
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
