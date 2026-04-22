@@ -1,0 +1,21 @@
+{
+  "profileName": "debug",
+  "description": "GUI development — single user, open-ended",
+  "mode": "sequential",
+  "load": {
+    "targetSessionsPerHour": 6,
+    "sessionDurationSeconds": 600,
+    "rampUpSeconds": 0,
+    "holdSeconds": 600,
+    "rampDownSeconds": 0,
+    "estimatedIterationSeconds": 30
+  },
+  "scenarios": [
+    { "id": "Sc01", "weight": 1 },
+    { "id": "Sc02", "weight": 1 }
+  ],
+  "logging": {
+    "level": "INFO",
+    "colors": true
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "profileName": "Breakpoint",
+  "description": "Ramp until failure — determine capacity ceiling",
+  "mode": "weighted",
+  "load": {
+    "targetSessionsPerHour": 1200,
+    "sessionDurationSeconds": 600,
+    "rampUpSeconds": 1800,
+    "holdSeconds": 300,
+    "rampDownSeconds": 60,
+    "estimatedIterationSeconds": 30
+  },
+  "scenarios": [
+    { "id": "Sc01", "weight": 70 },
+    { "id": "Sc02", "weight": 30 }
+  ],
+  "logging": {
+    "level": "INFO",
+    "colors": true
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "profileName": "Soak",
+  "description": "Long-running soak, 8h hold — detect leaks / drift",
+  "mode": "weighted",
+  "load": {
+    "targetSessionsPerHour": 120,
+    "sessionDurationSeconds": 600,
+    "rampUpSeconds": 300,
+    "holdSeconds": 28800,
+    "rampDownSeconds": 300,
+    "estimatedIterationSeconds": 30
+  },
+  "scenarios": [
+    { "id": "Sc01", "weight": 70 },
+    { "id": "Sc02", "weight": 30 }
+  ],
+  "logging": {
+    "level": "INFO",
+    "colors": true
+  }
+}

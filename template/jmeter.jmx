@@ -1,0 +1,1021 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="JMeter Template" enabled="true">
+      <stringProp name="TestPlan.comments">Reusable template. Configured via -Jprofile / -Jenv / -JprojectName; see jmeter-template-plan.md.</stringProp>
+      <boolProp name="TestPlan.functional_mode">false</boolProp>
+      <boolProp name="TestPlan.tearDown_on_shutdown">true</boolProp>
+      <boolProp name="TestPlan.serialize_threadgroups">true</boolProp>
+      <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+        <collectionProp name="Arguments.arguments"/>
+      </elementProp>
+      <stringProp name="TestPlan.user_define_classpath"></stringProp>
+    </TestPlan>
+    <hashTree>
+
+      <!-- ============================================================
+           ROOT-LEVEL DEFAULTS (plan §4.7)
+           HTTP Request Defaults bind to env-resolved props at runtime.
+           Proxy fields bind to optional -Jproxy.host / -Jproxy.port.
+           ============================================================ -->
+      <ConfigTestElement guiclass="HttpDefaultsGui" testclass="ConfigTestElement" testname="HTTP Request Defaults" enabled="true">
+        <stringProp name="HTTPSampler.domain">${__P(host,)}</stringProp>
+        <stringProp name="HTTPSampler.port">${__P(port,)}</stringProp>
+        <stringProp name="HTTPSampler.protocol">${__P(scheme,)}</stringProp>
+        <stringProp name="HTTPSampler.contentEncoding">UTF-8</stringProp>
+        <stringProp name="HTTPSampler.path"></stringProp>
+        <stringProp name="HTTPSampler.concurrentPool">6</stringProp>
+        <stringProp name="HTTPSampler.proxyHost">${__P(proxy.host,)}</stringProp>
+        <stringProp name="HTTPSampler.proxyPort">${__P(proxy.port,)}</stringProp>
+        <stringProp name="HTTPSampler.implementation">HttpClient4</stringProp>
+        <stringProp name="HTTPSampler.connect_timeout">10000</stringProp>
+        <stringProp name="HTTPSampler.response_timeout">30000</stringProp>
+        <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+          <collectionProp name="Arguments.arguments"/>
+        </elementProp>
+      </ConfigTestElement>
+      <hashTree/>
+
+      <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="HTTP Header Manager" enabled="true">
+        <collectionProp name="HeaderManager.headers">
+          <elementProp name="User-Agent" elementType="Header">
+            <stringProp name="Header.name">User-Agent</stringProp>
+            <stringProp name="Header.value">JMeter-Template/1.0</stringProp>
+          </elementProp>
+          <elementProp name="Accept" elementType="Header">
+            <stringProp name="Header.name">Accept</stringProp>
+            <stringProp name="Header.value">application/json, */*;q=0.8</stringProp>
+          </elementProp>
+          <elementProp name="Accept-Language" elementType="Header">
+            <stringProp name="Header.name">Accept-Language</stringProp>
+            <stringProp name="Header.value">en-US,en;q=0.9</stringProp>
+          </elementProp>
+        </collectionProp>
+      </HeaderManager>
+      <hashTree/>
+
+      <CacheManager guiclass="CacheManagerGui" testclass="CacheManager" testname="HTTP Cache Manager" enabled="true">
+        <boolProp name="clearEachIteration">true</boolProp>
+        <boolProp name="useExpires">true</boolProp>
+        <boolProp name="CacheManager.controlledByThread">false</boolProp>
+      </CacheManager>
+      <hashTree/>
+
+      <CookieManager guiclass="CookiePanel" testclass="CookieManager" testname="HTTP Cookie Manager" enabled="true">
+        <collectionProp name="CookieManager.cookies"/>
+        <boolProp name="CookieManager.clearEachIteration">true</boolProp>
+        <stringProp name="CookieManager.policy">standard</stringProp>
+        <stringProp name="CookieManager.implementation">org.apache.jmeter.protocol.http.control.HC4CookieHandler</stringProp>
+      </CookieManager>
+      <hashTree/>
+
+      <Arguments guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+        <collectionProp name="Arguments.arguments">
+          <elementProp name="TEMPLATE_VERSION" elementType="Argument">
+            <stringProp name="Argument.name">TEMPLATE_VERSION</stringProp>
+            <stringProp name="Argument.value">0.1.0</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+        </collectionProp>
+      </Arguments>
+      <hashTree/>
+
+      <!-- ============================================================
+           ASSERTION FAILURE LISTENER (plan §4.6, §7.2)
+           Inspects AssertionResult[] on each sample; emits one-line
+           tester-friendly summary on failure only. Runs under every
+           sampler (direct or transaction-wrapped).
+           Reads: prev (SampleResult), props["log"], vars["CURRENT_SCENARIO"].
+           Writes: nothing (pure side-effect logging).
+           ============================================================ -->
+      <JSR223Listener guiclass="TestBeanGUI" testclass="JSR223Listener" testname="LN01 Assertion Failure Summary" enabled="true">
+        <stringProp name="cacheKey">true</stringProp>
+        <stringProp name="filename"></stringProp>
+        <stringProp name="parameters"></stringProp>
+        <stringProp name="script">def results = prev?.getAssertionResults()
+if (!results || results.length == 0) return
+def logger = props.get(&quot;log&quot;)
+def scenario = vars.get(&quot;CURRENT_SCENARIO&quot;) ?: &quot;?&quot;
+def step = prev.getSampleLabel() ?: &quot;?&quot;
+results.each { ar -&gt;
+    if (ar.isFailure() || ar.isError()) {
+        def expected = ar.getName() ?: &quot;assertion&quot;
+        def actual = (ar.getFailureMessage() ?: &quot;failure&quot;)
+        if (actual.length() &gt; 200) actual = actual.substring(0, 200) + &quot;...&quot;
+        def rc = prev.getResponseCode()
+        def hint = (rc &amp;&amp; !rc.equals(&quot;200&quot;)) ? (&quot;response=&quot; + rc) : null
+        if (logger &amp;&amp; logger.errorSummary) {
+            logger.errorSummary(scenario, step, expected, actual, hint)
+        } else {
+            println &quot;[ERROR] [&quot; + scenario + &quot;/&quot; + step + &quot;] Expected &quot; + expected + &quot;, got &quot; + actual
+        }
+    }
+}</stringProp>
+        <stringProp name="scriptLanguage">groovy</stringProp>
+      </JSR223Listener>
+      <hashTree/>
+
+      <!-- ============================================================
+           setUp Thread Group (plan §4.7)
+           on_sample_error=stoptestnow so a FATAL config error aborts.
+           ============================================================ -->
+      <SetupThreadGroup guiclass="SetupThreadGroupGui" testclass="SetupThreadGroup" testname="setUp Thread Group" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">stoptestnow</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">1</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">1</stringProp>
+        <boolProp name="ThreadGroup.scheduler">false</boolProp>
+        <stringProp name="ThreadGroup.duration"></stringProp>
+        <stringProp name="ThreadGroup.delay"></stringProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+      </SetupThreadGroup>
+      <hashTree>
+        <!-- ============================================================
+             SU01 Load Config + Banner (plan §4.6, §4.1, §7.1)
+             Reads:  -Jprofile, -Jenv, -JprojectName, -Jmode,
+                     -JrunDir, -JresultsRootDir, -Jproxy.host, -Jproxy.port,
+                     profiles/{profile}.json, environmentVariables.json
+             Writes: props[scheme,host,port,mode,projectName,envName,
+                           concurrentUsers,rampUpSeconds,holdSeconds,
+                           rampDownSeconds,pacingMs,thinkTimeBudgetMs,
+                           estimatedIterationSec, {ScID}.weight...,
+                           log (logging module)]
+                     {runDir}/effective-config.json (CLI only)
+             GUI:    truncates jmeter.log; auto-loads debug defaults
+                     when -J props are unset.
+             ============================================================ -->
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="SU01 Load Config + Banner" enabled="true">
+          <stringProp name="cacheKey">true</stringProp>
+          <stringProp name="filename"></stringProp>
+          <stringProp name="parameters"></stringProp>
+          <stringProp name="script">import groovy.json.JsonSlurper
+import groovy.json.JsonBuilder
+import org.apache.jmeter.services.FileServer
+
+// ---------- logging module (thread-safe) ----------
+def buildLogger = { -&gt;
+    def ESC = ((char) 27).toString()
+    def ANSI = [reset:(ESC+&quot;[0m&quot;), cyan:(ESC+&quot;[36m&quot;), green:(ESC+&quot;[32m&quot;), yellow:(ESC+&quot;[33m&quot;), red:(ESC+&quot;[31m&quot;), bold:(ESC+&quot;[1m&quot;), dim:(ESC+&quot;[2m&quot;)]
+    def lock = new Object()
+    def tmplLog = org.slf4j.LoggerFactory.getLogger(&quot;tmpl&quot;)
+    def colorsEnabled = { -&gt;
+        def forced = props.get(&quot;log.colors&quot;)
+        if (forced != null) return Boolean.parseBoolean(forced.toString())
+        return System.getenv(&quot;WT_SESSION&quot;) != null
+    }
+    def color = { String t, String c -&gt; colorsEnabled() ? (ANSI[c] + t + ANSI.reset) : t }
+    def ts = { -&gt; new java.text.SimpleDateFormat(&quot;yyyy-MM-dd HH:mm:ss&quot;).format(new Date()) }
+    def emit = { String level, String where, String msg -&gt;
+        def c = [INFO:&quot;cyan&quot;, WARN:&quot;yellow&quot;, ERROR:&quot;red&quot;][level]
+        def lvl = c ? color(level.padRight(5), c) : level.padRight(5)
+        def line = &quot;[&quot; + ts() + &quot;] [&quot; + lvl + &quot;] [&quot; + where + &quot;] &quot; + msg
+        synchronized(lock) {
+            println line
+            switch(level) {
+                case &quot;INFO&quot;:  tmplLog.info(msg); break
+                case &quot;WARN&quot;:  tmplLog.warn(msg); break
+                case &quot;ERROR&quot;: tmplLog.error(msg); break
+            }
+        }
+    }
+    return [
+        info:  { String where, String msg -&gt; emit(&quot;INFO&quot;, where, msg) },
+        warn:  { String where, String msg -&gt; emit(&quot;WARN&quot;, where, msg) },
+        error: { String where, String msg -&gt; emit(&quot;ERROR&quot;, where, msg) },
+        banner: { String title, Map kvs -&gt;
+            def keyW = (kvs.keySet().collect { it.toString().length() }.max() ?: 20)
+            def valW = (kvs.values().collect { it.toString().length() }.max() ?: 20)
+            def inner = 2 + keyW + 3 + valW + 2
+            def boxW = Math.max(inner, title.length() + 4)
+            def top = &quot;╔&quot; + (&quot;═&quot; * boxW) + &quot;╗&quot;
+            def sep = &quot;╠&quot; + (&quot;═&quot; * boxW) + &quot;╣&quot;
+            def bot = &quot;╚&quot; + (&quot;═&quot; * boxW) + &quot;╝&quot;
+            def row = { String s -&gt; &quot;║&quot; + s.padRight(boxW) + &quot;║&quot; }
+            synchronized(lock) {
+                println color(top, &quot;cyan&quot;)
+                println color(row(&quot;  &quot; + title), &quot;cyan&quot;)
+                println color(sep, &quot;cyan&quot;)
+                kvs.each { k, v -&gt;
+                    def s = &quot;  &quot; + k.toString().padRight(keyW) + &quot; : &quot; + v.toString()
+                    println color(row(s), &quot;cyan&quot;)
+                }
+                println color(bot, &quot;cyan&quot;)
+            }
+        },
+        table: { List rows -&gt;
+            if (!rows) return
+            def cols = rows[0].keySet().toList()
+            def widths = [:]
+            cols.each { c -&gt; widths[c] = Math.max(c.toString().length(), (rows.collect { (it[c] ?: &quot;&quot;).toString().length() }.max() ?: 0)) }
+            def hdr = cols.collect { it.toString().padRight(widths[it]) }.join(&quot;  &quot;)
+            def dash = cols.collect { &quot;-&quot; * widths[it] }.join(&quot;  &quot;)
+            synchronized(lock) {
+                println hdr
+                println dash
+                rows.each { r -&gt; println cols.collect { (r[it] ?: &quot;&quot;).toString().padRight(widths[it]) }.join(&quot;  &quot;) }
+            }
+        },
+        errorSummary: { String scenario, String step, String expected, String actual, String hint -&gt;
+            def msg = &quot;Expected &quot; + expected + &quot;, got &quot; + actual + (hint ? (&quot; — &quot; + hint) : &quot;&quot;)
+            emit(&quot;ERROR&quot;, scenario + &quot;/&quot; + step, msg)
+        }
+    ]
+}
+
+// ---------- detect GUI ----------
+def inGui = false
+try { inGui = org.apache.jmeter.gui.GuiPackage.getInstance() != null } catch (Throwable t) { inGui = false }
+
+// ---------- base dir ----------
+def baseDir = FileServer.getFileServer().getBaseDir()
+
+// ---------- GUI: truncate jmeter.log on each run ----------
+if (inGui) {
+    try {
+        def lf = new File(baseDir, &quot;jmeter.log&quot;)
+        if (lf.exists()) { new FileOutputStream(lf, false).close() }
+    } catch (Throwable t) { /* ignore */ }
+}
+
+// ---------- install logger into props ----------
+def logger = buildLogger()
+props.put(&quot;log&quot;, logger)
+
+def fatal = { String msg -&gt;
+    println &quot;[FATAL] &quot; + msg
+    org.slf4j.LoggerFactory.getLogger(&quot;tmpl&quot;).error(&quot;[FATAL] &quot; + msg)
+    SampleResult.setSuccessful(false)
+    SampleResult.setResponseCode(&quot;FATAL&quot;)
+    SampleResult.setResponseMessage(&quot;[FATAL] &quot; + msg)
+    throw new RuntimeException(msg)
+}
+
+// ---------- resolve -J props; GUI defaults per plan §6.3 ----------
+def profileName = props.get(&quot;profile&quot;)
+def envName     = props.get(&quot;env&quot;)
+def projectName = props.get(&quot;projectName&quot;)
+def modeOverride= props.get(&quot;mode&quot;)
+def runDir      = props.get(&quot;runDir&quot;)
+
+if (inGui) {
+    if (!profileName) profileName = &quot;debug&quot;
+    if (!envName)     envName     = &quot;dev&quot;
+    if (!projectName) projectName = &quot;debug&quot;
+}
+
+if (!profileName) fatal(&quot;Missing required -Jprofile&quot;)
+if (!envName)     fatal(&quot;Missing required -Jenv&quot;)
+if (!projectName) fatal(&quot;Missing required -JprojectName&quot;)
+
+// ---------- environments ----------
+def envFile = new File(baseDir, &quot;environmentVariables.json&quot;)
+if (!envFile.exists()) fatal(&quot;Missing environmentVariables.json at &quot; + envFile.absolutePath)
+def envJson = new JsonSlurper().parse(envFile)
+def envs = envJson?.environments
+if (!(envs instanceof Map)) fatal(&quot;environmentVariables.json: missing 'environments' map&quot;)
+def env = envs[envName]
+if (env == null) fatal(&quot;Unknown environment: &quot; + envName + &quot; (available: &quot; + envs.keySet().sort().join(&quot;, &quot;) + &quot;)&quot;)
+[&quot;scheme&quot;,&quot;host&quot;,&quot;port&quot;].each { k -&gt;
+    if (env[k] == null) fatal(&quot;environmentVariables.json[&quot; + envName + &quot;]: missing &quot; + k)
+}
+
+// ---------- profile ----------
+def profileFile = new File(baseDir, &quot;profiles/&quot; + profileName + &quot;.json&quot;)
+if (!profileFile.exists()) fatal(&quot;Profile file not found: &quot; + profileFile.absolutePath)
+def profile = new JsonSlurper().parse(profileFile)
+
+def requireKey = { Map m, String path -&gt;
+    def parts = path.tokenize(&quot;.&quot;)
+    def cursor = m
+    for (p in parts) {
+        if (cursor == null || !(cursor instanceof Map) || !cursor.containsKey(p)) {
+            fatal(&quot;Missing profile key: &quot; + path)
+        }
+        cursor = cursor[p]
+    }
+    return cursor
+}
+[&quot;profileName&quot;,&quot;mode&quot;,
+ &quot;load.targetSessionsPerHour&quot;,&quot;load.sessionDurationSeconds&quot;,
+ &quot;load.rampUpSeconds&quot;,&quot;load.holdSeconds&quot;,&quot;load.rampDownSeconds&quot;,
+ &quot;load.estimatedIterationSeconds&quot;].each { requireKey(profile, it) }
+
+if (!(profile.scenarios instanceof List) || profile.scenarios.isEmpty()) {
+    fatal(&quot;Profile 'scenarios' must be a non-empty list&quot;)
+}
+
+// ---------- override precedence: profile is base; -J overrides ----------
+def mode = modeOverride ?: profile.mode
+if (!(mode in [&quot;weighted&quot;,&quot;sequential&quot;])) fatal(&quot;Invalid mode: &quot; + mode)
+
+// ---------- derived math (closed-user model, plan §4.1) ----------
+def sessSec = profile.load.sessionDurationSeconds as double
+def tph     = profile.load.targetSessionsPerHour as double
+def estIt   = profile.load.estimatedIterationSeconds as double
+
+def concurrentUsers = Math.max(1, (int) Math.ceil(tph * sessSec / 3600.0d))
+def pacingSec       = sessSec
+def thinkBudgetSec  = Math.max(sessSec - estIt, 0.0d)
+
+// ---------- publish props ----------
+props.put(&quot;scheme&quot;,               env.scheme.toString())
+props.put(&quot;host&quot;,                 env.host.toString())
+props.put(&quot;port&quot;,                 env.port.toString())
+props.put(&quot;mode&quot;,                 mode)
+props.put(&quot;projectName&quot;,          projectName)
+props.put(&quot;envName&quot;,              envName)
+props.put(&quot;concurrentUsers&quot;,      concurrentUsers.toString())
+props.put(&quot;rampUpSeconds&quot;,        profile.load.rampUpSeconds.toString())
+props.put(&quot;holdSeconds&quot;,          profile.load.holdSeconds.toString())
+props.put(&quot;rampDownSeconds&quot;,      profile.load.rampDownSeconds.toString())
+props.put(&quot;pacingMs&quot;,             ((long)(pacingSec * 1000.0d)).toString())
+props.put(&quot;thinkTimeBudgetMs&quot;,    ((long)(thinkBudgetSec * 1000.0d)).toString())
+props.put(&quot;estimatedIterationSec&quot;, estIt.toString())
+
+// ---------- scenario weights ----------
+def runtimeWeights = [:]
+profile.scenarios.each { sc -&gt;
+    def id = sc.id?.toString()
+    if (!id) fatal(&quot;scenarios[] entry missing 'id'&quot;)
+    def w
+    if (mode == &quot;sequential&quot;) {
+        w = 1
+    } else {
+        w = (sc.weight as Integer) ?: 0
+        if (w &lt;= 0) fatal(&quot;scenarios[&quot; + id + &quot;].weight must be &gt; 0 in weighted mode&quot;)
+    }
+    props.put(id + &quot;.weight&quot;, w.toString())
+    runtimeWeights[id] = w
+}
+
+// ---------- effective-config.json (CLI only) ----------
+if (!inGui &amp;&amp; runDir) {
+    def rd = new File(runDir)
+    rd.mkdirs()
+    new File(rd, &quot;custom&quot;).mkdirs()
+    def effective = [
+        project: projectName,
+        profile: [name: profile.profileName, description: profile.description, source: profileFile.absolutePath],
+        mode: mode,
+        environment: [name: envName, scheme: env.scheme, host: env.host, port: env.port],
+        load: [
+            targetSessionsPerHour: profile.load.targetSessionsPerHour,
+            sessionDurationSeconds: profile.load.sessionDurationSeconds,
+            rampUpSeconds: profile.load.rampUpSeconds,
+            holdSeconds: profile.load.holdSeconds,
+            rampDownSeconds: profile.load.rampDownSeconds,
+            estimatedIterationSeconds: profile.load.estimatedIterationSeconds
+        ],
+        derived: [
+            concurrentUsers: concurrentUsers,
+            pacingSeconds: pacingSec,
+            thinkTimeBudgetSeconds: thinkBudgetSec
+        ],
+        scenarios: profile.scenarios.collect { [id: it.id, weight: runtimeWeights[it.id]] },
+        logging: profile.logging ?: [level: &quot;INFO&quot;, colors: true],
+        proxy: [ host: (props.get(&quot;proxy.host&quot;) ?: null), port: (props.get(&quot;proxy.port&quot;) ?: null) ]
+    ]
+    new File(rd, &quot;effective-config.json&quot;).text = new JsonBuilder(effective).toPrettyString()
+}
+
+// ---------- banner (CLI only) ----------
+if (!inGui) {
+    def scenDesc = profile.scenarios.collect {
+        def w = runtimeWeights[it.id]
+        (mode == &quot;weighted&quot;) ? (it.id + &quot; (&quot; + w + &quot;%)&quot;) : (it.id + &quot; (&quot; + w + &quot;)&quot;)
+    }.join(&quot;, &quot;)
+    def envStr = env.scheme + &quot;://&quot; + env.host + &quot;:&quot; + env.port
+    def kvs = [
+        &quot;Project&quot;           : projectName,
+        &quot;Profile&quot;           : profile.profileName,
+        &quot;Environment&quot;       : envName + &quot; (&quot; + envStr + &quot;)&quot;,
+        &quot;Mode&quot;              : mode,
+        &quot;Concurrent users&quot;  : concurrentUsers,
+        &quot;Sessions/hour&quot;     : profile.load.targetSessionsPerHour,
+        &quot;Session target (s)&quot;: profile.load.sessionDurationSeconds,
+        &quot;Think time budget&quot; : thinkBudgetSec + &quot; (est. iter = &quot; + (estIt as int) + &quot;s)&quot;,
+        &quot;Ramp / Hold / Ramp&quot;: profile.load.rampUpSeconds + &quot; / &quot; + profile.load.holdSeconds + &quot; / &quot; + profile.load.rampDownSeconds,
+        &quot;Scenarios&quot;         : scenDesc
+    ]
+    logger.banner(&quot;JMeter Run Configuration&quot;, kvs)
+}
+
+SampleResult.setSuccessful(true)
+SampleResult.setResponseCode(&quot;200&quot;)
+SampleResult.setResponseMessage(&quot;setUp complete&quot;)
+</stringProp>
+          <stringProp name="scriptLanguage">groovy</stringProp>
+        </JSR223Sampler>
+        <hashTree/>
+      </hashTree>
+
+      <!-- ============================================================
+           Main Thread Group — Ultimate Thread Group (plan §4.1)
+           Schedule: start=concurrentUsers, delay=0, rampUp, hold, rampDown.
+           ============================================================ -->
+      <kg.apc.jmeter.threads.UltimateThreadGroup guiclass="kg.apc.jmeter.threads.UltimateThreadGroupGui" testclass="kg.apc.jmeter.threads.UltimateThreadGroup" testname="Main Thread Group (UTG)" enabled="true">
+        <collectionProp name="ultimatethreadgroupdata">
+          <collectionProp name="row-1">
+            <stringProp name="utg.threads">${__P(concurrentUsers,1)}</stringProp>
+            <stringProp name="utg.initialDelay">0</stringProp>
+            <stringProp name="utg.startupTime">${__P(rampUpSeconds,60)}</stringProp>
+            <stringProp name="utg.holdLoad">${__P(holdSeconds,60)}</stringProp>
+            <stringProp name="utg.shutdownTime">${__P(rampDownSeconds,60)}</stringProp>
+          </collectionProp>
+        </collectionProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <intProp name="LoopController.loops">-1</intProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <stringProp name="Hostname"></stringProp>
+        <stringProp name="Unit">S</stringProp>
+      </kg.apc.jmeter.threads.UltimateThreadGroup>
+      <hashTree>
+
+        <!-- ============================================================
+             Weighted Switch Controller (plan §4.2)
+             First direct child per iteration, so scenarios reference via
+             Module Controller; weights bound to -Jprops so sequential mode
+             (equal weights) yields deterministic round-robin.
+             ============================================================ -->
+        <com.blazemeter.jmeter.controller.WeightedSwitchController guiclass="com.blazemeter.jmeter.controller.WeightedSwitchControllerGui" testclass="com.blazemeter.jmeter.controller.WeightedSwitchController" testname="Scenario Selector (Weighted Switch)" enabled="true">
+          <boolProp name="dont_count_on_zero_weights">false</boolProp>
+          <collectionProp name="Weights">
+            <collectionProp name="row-Sc01">
+              <stringProp name="name">Sc01</stringProp>
+              <stringProp name="weight">${__P(Sc01.weight,1)}</stringProp>
+            </collectionProp>
+            <collectionProp name="row-Sc02">
+              <stringProp name="name">Sc02</stringProp>
+              <stringProp name="weight">${__P(Sc02.weight,1)}</stringProp>
+            </collectionProp>
+          </collectionProp>
+          <boolProp name="is_random_choice">false</boolProp>
+        </com.blazemeter.jmeter.controller.WeightedSwitchController>
+        <hashTree>
+          <ModuleController guiclass="ModuleControllerGui" testclass="ModuleController" testname="Sc01" enabled="true">
+            <collectionProp name="ModuleController.node_path">
+              <stringProp name="np-1">JMeter Template</stringProp>
+              <stringProp name="np-2">TestPlan</stringProp>
+              <stringProp name="np-3">Fragments</stringProp>
+              <stringProp name="np-4">TestFragmentController</stringProp>
+              <stringProp name="np-5">Sc01</stringProp>
+              <stringProp name="np-6">TransactionController</stringProp>
+            </collectionProp>
+          </ModuleController>
+          <hashTree/>
+          <ModuleController guiclass="ModuleControllerGui" testclass="ModuleController" testname="Sc02" enabled="true">
+            <collectionProp name="ModuleController.node_path">
+              <stringProp name="np-1">JMeter Template</stringProp>
+              <stringProp name="np-2">TestPlan</stringProp>
+              <stringProp name="np-3">Fragments</stringProp>
+              <stringProp name="np-4">TestFragmentController</stringProp>
+              <stringProp name="np-5">Sc02</stringProp>
+              <stringProp name="np-6">TransactionController</stringProp>
+            </collectionProp>
+          </ModuleController>
+          <hashTree/>
+        </hashTree>
+
+      </hashTree>
+
+      <!-- ============================================================
+           tearDown Thread Group (plan §4.4, §8 phase 5)
+           GUI-guarded. Closes shared writers stashed under props["writer.*"],
+           emits summary. Report/zip are handled by the launcher.
+           ============================================================ -->
+      <PostThreadGroup guiclass="PostThreadGroupGui" testclass="PostThreadGroup" testname="tearDown Thread Group" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">1</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">1</stringProp>
+        <boolProp name="ThreadGroup.scheduler">false</boolProp>
+        <stringProp name="ThreadGroup.duration"></stringProp>
+        <stringProp name="ThreadGroup.delay"></stringProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+      </PostThreadGroup>
+      <hashTree>
+        <!-- ============================================================
+             TD01 Finalize (plan §4.4, phase 5)
+             Reads:  props["runDir"], props["log"], any props["writer.*"]
+             Writes: closes writers; emits summary via logger.info
+             GUI:    no-ops after guard.
+             ============================================================ -->
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="TD01 Finalize" enabled="true">
+          <stringProp name="cacheKey">true</stringProp>
+          <stringProp name="filename"></stringProp>
+          <stringProp name="parameters"></stringProp>
+          <stringProp name="script">def inGui = false
+try { inGui = org.apache.jmeter.gui.GuiPackage.getInstance() != null } catch (Throwable t) { inGui = false }
+
+if (inGui) {
+    SampleResult.setSuccessful(true)
+    SampleResult.setResponseMessage(&quot;tearDown: GUI no-op&quot;)
+    return
+}
+
+def runDir = props.get(&quot;runDir&quot;)
+def logger = props.get(&quot;log&quot;)
+
+// Close shared writers (prefix &quot;writer.&quot;) stashed by scenario fragments
+def keys = []
+props.entrySet().each { e -&gt;
+    def k = e.key
+    if ((k instanceof String) &amp;&amp; k.startsWith(&quot;writer.&quot;)) keys &lt;&lt; k
+}
+keys.each { k -&gt;
+    try {
+        def w = props.get(k)
+        if (w != null) {
+            if (w.respondsTo(&quot;flush&quot;)) w.flush()
+            if (w.respondsTo(&quot;close&quot;)) w.close()
+        }
+    } catch (Throwable t) { /* ignore */ }
+    props.remove(k)
+}
+
+def msg = &quot;tearDown complete — runDir=&quot; + (runDir ?: &quot;(unset)&quot;)
+if (logger &amp;&amp; logger.info) logger.info(&quot;tearDown&quot;, msg) else println &quot;[INFO] &quot; + msg
+
+SampleResult.setSuccessful(true)
+SampleResult.setResponseCode(&quot;200&quot;)
+SampleResult.setResponseMessage(msg)
+</stringProp>
+          <stringProp name="scriptLanguage">groovy</stringProp>
+        </JSR223Sampler>
+        <hashTree/>
+      </hashTree>
+
+      <!-- ============================================================
+           Fragments subtree (plan §4.10)
+           Disabled at the Test Fragment level — Module Controllers in the
+           Main Thread Group reference the Sc01/Sc02 Transaction Controllers.
+           ============================================================ -->
+      <TestFragmentController guiclass="TestFragmentControllerGui" testclass="TestFragmentController" testname="Fragments" enabled="false"/>
+      <hashTree>
+
+        <!-- =========== Sc01 Transaction Controller (plan §4.2, §4.8) =========== -->
+        <TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="Sc01" enabled="true">
+          <boolProp name="TransactionController.parent">true</boolProp>
+          <boolProp name="TransactionController.includeTimers">false</boolProp>
+        </TransactionController>
+        <hashTree>
+
+          <!-- Sampler 1: records iter start (PreProcessor) -->
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Sc01/step1-login" enabled="true">
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+              <collectionProp name="Arguments.arguments"/>
+            </elementProp>
+            <stringProp name="HTTPSampler.domain"></stringProp>
+            <stringProp name="HTTPSampler.port"></stringProp>
+            <stringProp name="HTTPSampler.protocol"></stringProp>
+            <stringProp name="HTTPSampler.contentEncoding"></stringProp>
+            <stringProp name="HTTPSampler.path">/api/login</stringProp>
+            <stringProp name="HTTPSampler.method">GET</stringProp>
+            <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+            <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+            <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+            <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+            <stringProp name="HTTPSampler.embedded_url_re"></stringProp>
+            <stringProp name="HTTPSampler.connect_timeout"></stringProp>
+            <stringProp name="HTTPSampler.response_timeout"></stringProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <!-- PreProcessor: iter start + scenario label -->
+            <JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="Sc01 iter-start" enabled="true">
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="script">vars.putObject(&quot;iterStart&quot;, System.currentTimeMillis())
+vars.put(&quot;CURRENT_SCENARIO&quot;, &quot;Sc01&quot;)
+</stringProp>
+              <stringProp name="scriptLanguage">groovy</stringProp>
+            </JSR223PreProcessor>
+            <hashTree/>
+            <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="status 2xx" enabled="true">
+              <collectionProp name="Asserion.test_strings">
+                <stringProp name="a1">2\d\d</stringProp>
+              </collectionProp>
+              <stringProp name="Assertion.custom_message">Expected 2xx HTTP status</stringProp>
+              <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+              <boolProp name="Assertion.assume_success">false</boolProp>
+              <intProp name="Assertion.test_type">1</intProp>
+            </ResponseAssertion>
+            <hashTree/>
+          </hashTree>
+
+          <!-- think-time gap (between step1 and step2) -->
+          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think Time Sc01 (1/2)" enabled="true">
+            <stringProp name="ConstantTimer.delay">${__groovy(Math.max(0L\, (props.get('thinkTimeBudgetMs') ?: '0').toLong().intdiv(2L)))}</stringProp>
+          </ConstantTimer>
+          <hashTree/>
+
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Sc01/step2-search" enabled="true">
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+              <collectionProp name="Arguments.arguments"/>
+            </elementProp>
+            <stringProp name="HTTPSampler.domain"></stringProp>
+            <stringProp name="HTTPSampler.port"></stringProp>
+            <stringProp name="HTTPSampler.protocol"></stringProp>
+            <stringProp name="HTTPSampler.contentEncoding"></stringProp>
+            <stringProp name="HTTPSampler.path">/api/search</stringProp>
+            <stringProp name="HTTPSampler.method">GET</stringProp>
+            <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+            <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+            <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+            <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+            <stringProp name="HTTPSampler.embedded_url_re"></stringProp>
+            <stringProp name="HTTPSampler.connect_timeout"></stringProp>
+            <stringProp name="HTTPSampler.response_timeout"></stringProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="status 2xx" enabled="true">
+              <collectionProp name="Asserion.test_strings">
+                <stringProp name="a1">2\d\d</stringProp>
+              </collectionProp>
+              <stringProp name="Assertion.custom_message">Expected 2xx HTTP status</stringProp>
+              <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+              <boolProp name="Assertion.assume_success">false</boolProp>
+              <intProp name="Assertion.test_type">1</intProp>
+            </ResponseAssertion>
+            <hashTree/>
+          </hashTree>
+
+          <!-- think-time gap (between step2 and step3) -->
+          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think Time Sc01 (2/2)" enabled="true">
+            <stringProp name="ConstantTimer.delay">${__groovy(Math.max(0L\, (props.get('thinkTimeBudgetMs') ?: '0').toLong().intdiv(2L)))}</stringProp>
+          </ConstantTimer>
+          <hashTree/>
+
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Sc01/step3-confirm" enabled="true">
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+              <collectionProp name="Arguments.arguments"/>
+            </elementProp>
+            <stringProp name="HTTPSampler.domain"></stringProp>
+            <stringProp name="HTTPSampler.port"></stringProp>
+            <stringProp name="HTTPSampler.protocol"></stringProp>
+            <stringProp name="HTTPSampler.contentEncoding"></stringProp>
+            <stringProp name="HTTPSampler.path">/api/confirm</stringProp>
+            <stringProp name="HTTPSampler.method">GET</stringProp>
+            <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+            <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+            <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+            <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+            <stringProp name="HTTPSampler.embedded_url_re"></stringProp>
+            <stringProp name="HTTPSampler.connect_timeout"></stringProp>
+            <stringProp name="HTTPSampler.response_timeout"></stringProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="status 2xx" enabled="true">
+              <collectionProp name="Asserion.test_strings">
+                <stringProp name="a1">2\d\d</stringProp>
+              </collectionProp>
+              <stringProp name="Assertion.custom_message">Expected 2xx HTTP status</stringProp>
+              <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+              <boolProp name="Assertion.assume_success">false</boolProp>
+              <intProp name="Assertion.test_type">1</intProp>
+            </ResponseAssertion>
+            <hashTree/>
+            <!-- PostProcessor on last sampler: compute DELAY_TIME (plan §4.8) -->
+            <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Sc01 compute DELAY_TIME" enabled="true">
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="script">def pacingMs = (props.get(&quot;pacingMs&quot;) ?: &quot;0&quot;).toLong()
+def start = vars.getObject(&quot;iterStart&quot;) as Long
+def now = System.currentTimeMillis()
+def elapsed = (start != null) ? (now - start) : 0L
+def remaining = pacingMs - elapsed
+if (remaining &lt; 0L) {
+    def overMs = -remaining
+    def logger = props.get(&quot;log&quot;)
+    def msg = &quot;Pacing breach: iteration &quot; + (elapsed / 1000.0d) + &quot;s, target &quot; + (pacingMs / 1000.0d) + &quot;s, overage &quot; + (overMs / 1000.0d) + &quot;s&quot;
+    if (logger &amp;&amp; logger.warn) logger.warn(&quot;Sc01&quot;, msg) else println &quot;[WARN] &quot; + msg
+    vars.put(&quot;DELAY_TIME&quot;, &quot;0&quot;)
+} else {
+    vars.put(&quot;DELAY_TIME&quot;, String.valueOf(remaining))
+}
+</stringProp>
+              <stringProp name="scriptLanguage">groovy</stringProp>
+            </JSR223PostProcessor>
+            <hashTree/>
+          </hashTree>
+
+          <!-- Pacing anchor (plan §4.8): Flow Control Action Pause(0) + Constant Timer(${DELAY_TIME}) -->
+          <TestAction guiclass="TestActionGui" testclass="TestAction" testname="Sc01 Pacing Anchor" enabled="true">
+            <intProp name="ActionProcessor.action">1</intProp>
+            <intProp name="ActionProcessor.target">0</intProp>
+            <stringProp name="ActionProcessor.duration">0</stringProp>
+          </TestAction>
+          <hashTree>
+            <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Sc01 Pacing Timer" enabled="true">
+              <stringProp name="ConstantTimer.delay">${DELAY_TIME}</stringProp>
+            </ConstantTimer>
+            <hashTree/>
+          </hashTree>
+
+        </hashTree>
+
+        <!-- =========== Sc02 Transaction Controller (plan §4.2, §4.8) =========== -->
+        <TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="Sc02" enabled="true">
+          <boolProp name="TransactionController.parent">true</boolProp>
+          <boolProp name="TransactionController.includeTimers">false</boolProp>
+        </TransactionController>
+        <hashTree>
+
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Sc02/step1-home" enabled="true">
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+              <collectionProp name="Arguments.arguments"/>
+            </elementProp>
+            <stringProp name="HTTPSampler.domain"></stringProp>
+            <stringProp name="HTTPSampler.port"></stringProp>
+            <stringProp name="HTTPSampler.protocol"></stringProp>
+            <stringProp name="HTTPSampler.contentEncoding"></stringProp>
+            <stringProp name="HTTPSampler.path">/api/home</stringProp>
+            <stringProp name="HTTPSampler.method">GET</stringProp>
+            <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+            <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+            <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+            <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+            <stringProp name="HTTPSampler.embedded_url_re"></stringProp>
+            <stringProp name="HTTPSampler.connect_timeout"></stringProp>
+            <stringProp name="HTTPSampler.response_timeout"></stringProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="Sc02 iter-start" enabled="true">
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="script">vars.putObject(&quot;iterStart&quot;, System.currentTimeMillis())
+vars.put(&quot;CURRENT_SCENARIO&quot;, &quot;Sc02&quot;)
+</stringProp>
+              <stringProp name="scriptLanguage">groovy</stringProp>
+            </JSR223PreProcessor>
+            <hashTree/>
+            <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="status 2xx" enabled="true">
+              <collectionProp name="Asserion.test_strings">
+                <stringProp name="a1">2\d\d</stringProp>
+              </collectionProp>
+              <stringProp name="Assertion.custom_message">Expected 2xx HTTP status</stringProp>
+              <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+              <boolProp name="Assertion.assume_success">false</boolProp>
+              <intProp name="Assertion.test_type">1</intProp>
+            </ResponseAssertion>
+            <hashTree/>
+          </hashTree>
+
+          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think Time Sc02 (1/2)" enabled="true">
+            <stringProp name="ConstantTimer.delay">${__groovy(Math.max(0L\, (props.get('thinkTimeBudgetMs') ?: '0').toLong().intdiv(2L)))}</stringProp>
+          </ConstantTimer>
+          <hashTree/>
+
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Sc02/step2-details" enabled="true">
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+              <collectionProp name="Arguments.arguments"/>
+            </elementProp>
+            <stringProp name="HTTPSampler.domain"></stringProp>
+            <stringProp name="HTTPSampler.port"></stringProp>
+            <stringProp name="HTTPSampler.protocol"></stringProp>
+            <stringProp name="HTTPSampler.contentEncoding"></stringProp>
+            <stringProp name="HTTPSampler.path">/api/details</stringProp>
+            <stringProp name="HTTPSampler.method">GET</stringProp>
+            <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+            <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+            <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+            <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+            <stringProp name="HTTPSampler.embedded_url_re"></stringProp>
+            <stringProp name="HTTPSampler.connect_timeout"></stringProp>
+            <stringProp name="HTTPSampler.response_timeout"></stringProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="status 2xx" enabled="true">
+              <collectionProp name="Asserion.test_strings">
+                <stringProp name="a1">2\d\d</stringProp>
+              </collectionProp>
+              <stringProp name="Assertion.custom_message">Expected 2xx HTTP status</stringProp>
+              <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+              <boolProp name="Assertion.assume_success">false</boolProp>
+              <intProp name="Assertion.test_type">1</intProp>
+            </ResponseAssertion>
+            <hashTree/>
+          </hashTree>
+
+          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think Time Sc02 (2/2)" enabled="true">
+            <stringProp name="ConstantTimer.delay">${__groovy(Math.max(0L\, (props.get('thinkTimeBudgetMs') ?: '0').toLong().intdiv(2L)))}</stringProp>
+          </ConstantTimer>
+          <hashTree/>
+
+          <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Sc02/step3-submit" enabled="true">
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+              <collectionProp name="Arguments.arguments"/>
+            </elementProp>
+            <stringProp name="HTTPSampler.domain"></stringProp>
+            <stringProp name="HTTPSampler.port"></stringProp>
+            <stringProp name="HTTPSampler.protocol"></stringProp>
+            <stringProp name="HTTPSampler.contentEncoding"></stringProp>
+            <stringProp name="HTTPSampler.path">/api/submit</stringProp>
+            <stringProp name="HTTPSampler.method">GET</stringProp>
+            <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+            <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+            <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+            <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+            <stringProp name="HTTPSampler.embedded_url_re"></stringProp>
+            <stringProp name="HTTPSampler.connect_timeout"></stringProp>
+            <stringProp name="HTTPSampler.response_timeout"></stringProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="status 2xx" enabled="true">
+              <collectionProp name="Asserion.test_strings">
+                <stringProp name="a1">2\d\d</stringProp>
+              </collectionProp>
+              <stringProp name="Assertion.custom_message">Expected 2xx HTTP status</stringProp>
+              <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+              <boolProp name="Assertion.assume_success">false</boolProp>
+              <intProp name="Assertion.test_type">1</intProp>
+            </ResponseAssertion>
+            <hashTree/>
+            <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Sc02 compute DELAY_TIME" enabled="true">
+              <stringProp name="cacheKey">true</stringProp>
+              <stringProp name="filename"></stringProp>
+              <stringProp name="parameters"></stringProp>
+              <stringProp name="script">def pacingMs = (props.get(&quot;pacingMs&quot;) ?: &quot;0&quot;).toLong()
+def start = vars.getObject(&quot;iterStart&quot;) as Long
+def now = System.currentTimeMillis()
+def elapsed = (start != null) ? (now - start) : 0L
+def remaining = pacingMs - elapsed
+if (remaining &lt; 0L) {
+    def overMs = -remaining
+    def logger = props.get(&quot;log&quot;)
+    def msg = &quot;Pacing breach: iteration &quot; + (elapsed / 1000.0d) + &quot;s, target &quot; + (pacingMs / 1000.0d) + &quot;s, overage &quot; + (overMs / 1000.0d) + &quot;s&quot;
+    if (logger &amp;&amp; logger.warn) logger.warn(&quot;Sc02&quot;, msg) else println &quot;[WARN] &quot; + msg
+    vars.put(&quot;DELAY_TIME&quot;, &quot;0&quot;)
+} else {
+    vars.put(&quot;DELAY_TIME&quot;, String.valueOf(remaining))
+}
+</stringProp>
+              <stringProp name="scriptLanguage">groovy</stringProp>
+            </JSR223PostProcessor>
+            <hashTree/>
+          </hashTree>
+
+          <TestAction guiclass="TestActionGui" testclass="TestAction" testname="Sc02 Pacing Anchor" enabled="true">
+            <intProp name="ActionProcessor.action">1</intProp>
+            <intProp name="ActionProcessor.target">0</intProp>
+            <stringProp name="ActionProcessor.duration">0</stringProp>
+          </TestAction>
+          <hashTree>
+            <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Sc02 Pacing Timer" enabled="true">
+              <stringProp name="ConstantTimer.delay">${DELAY_TIME}</stringProp>
+            </ConstantTimer>
+            <hashTree/>
+          </hashTree>
+
+        </hashTree>
+
+        <!-- =========== Fragment: Log to File (Groovy) (plan §4.10) =========== -->
+        <!-- Drop-in JSR223 PostProcessor or Sampler. Writes a line to
+             ${runDir}/custom/{CURRENT_SCENARIO}.log via a cached writer.
+             Uses props["writer.<scenario>"] so only one FileWriter per scenario;
+             tearDown closes them.
+             Disabled — enable on a per-sampler basis during scenario build-out.
+             Reads:  props["runDir"], vars["CURRENT_SCENARIO"], prev
+             Writes: one line per invocation to the scenario log file -->
+        <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Fragment: Log to File (Groovy)" enabled="false">
+          <stringProp name="cacheKey">true</stringProp>
+          <stringProp name="filename"></stringProp>
+          <stringProp name="parameters"></stringProp>
+          <stringProp name="script">def runDir = props.get(&quot;runDir&quot;)
+def logger = props.get(&quot;log&quot;)
+def scenario = vars.get(&quot;CURRENT_SCENARIO&quot;) ?: &quot;unknown&quot;
+if (!runDir) {
+    if (logger &amp;&amp; logger.warn) logger.warn(scenario, &quot;Log to File skipped: runDir is unset (GUI run)&quot;)
+    return
+}
+def key = &quot;writer.&quot; + scenario
+def w = props.get(key)
+if (w == null) {
+    def dir = new File(runDir, &quot;custom&quot;); dir.mkdirs()
+    def f = new File(dir, scenario + &quot;.log&quot;)
+    // synchronize creation to avoid racing threads double-opening
+    synchronized(props) {
+        w = props.get(key)
+        if (w == null) {
+            w = new java.io.PrintWriter(new java.io.BufferedWriter(new java.io.FileWriter(f, true)), true)
+            props.put(key, w)
+        }
+    }
+}
+def ts = new java.text.SimpleDateFormat(&quot;yyyy-MM-dd HH:mm:ss.SSS&quot;).format(new Date())
+def label = prev?.getSampleLabel() ?: &quot;?&quot;
+def rc = prev?.getResponseCode() ?: &quot;?&quot;
+def line = ts + &quot;\t&quot; + scenario + &quot;\t&quot; + label + &quot;\t&quot; + rc
+synchronized(w) { w.println(line) }
+</stringProp>
+          <stringProp name="scriptLanguage">groovy</stringProp>
+        </JSR223PostProcessor>
+        <hashTree/>
+
+        <!-- =========== Fragment: Proxy-aware HTTP Request (plan §4.9, §4.10) =========== -->
+        <!-- Example showing that root HTTP Request Defaults already supply
+             proxy.host/proxy.port; individual samplers override only when
+             needed (e.g., a sampler must bypass the proxy). -->
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Fragment: Proxy-aware HTTP Request (example)" enabled="false">
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments"/>
+          </elementProp>
+          <stringProp name="HTTPSampler.domain"></stringProp>
+          <stringProp name="HTTPSampler.port"></stringProp>
+          <stringProp name="HTTPSampler.protocol"></stringProp>
+          <stringProp name="HTTPSampler.contentEncoding"></stringProp>
+          <stringProp name="HTTPSampler.path">/api/example</stringProp>
+          <stringProp name="HTTPSampler.method">GET</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+          <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+          <stringProp name="HTTPSampler.embedded_url_re"></stringProp>
+          <stringProp name="HTTPSampler.connect_timeout"></stringProp>
+          <stringProp name="HTTPSampler.response_timeout"></stringProp>
+          <stringProp name="HTTPSampler.proxyHost">${__P(proxy.host,)}</stringProp>
+          <stringProp name="HTTPSampler.proxyPort">${__P(proxy.port,)}</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree/>
+
+        <!-- =========== Fragment: Assertion Patterns (plan §4.10, §4.11) =========== -->
+        <GenericController guiclass="LogicControllerGui" testclass="GenericController" testname="Fragment: Assertion Patterns" enabled="false"/>
+        <hashTree>
+          <!-- status-only -->
+          <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="Pattern: status == 200" enabled="true">
+            <collectionProp name="Asserion.test_strings">
+              <stringProp name="a1">200</stringProp>
+            </collectionProp>
+            <stringProp name="Assertion.custom_message">Expected exactly HTTP 200</stringProp>
+            <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+            <boolProp name="Assertion.assume_success">false</boolProp>
+            <intProp name="Assertion.test_type">8</intProp>
+          </ResponseAssertion>
+          <hashTree/>
+          <!-- body-contains -->
+          <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="Pattern: body contains" enabled="true">
+            <collectionProp name="Asserion.test_strings">
+              <stringProp name="a1">&quot;status&quot;:&quot;ok&quot;</stringProp>
+            </collectionProp>
+            <stringProp name="Assertion.custom_message">Expected body to contain &quot;status&quot;:&quot;ok&quot;</stringProp>
+            <stringProp name="Assertion.test_field">Assertion.response_data</stringProp>
+            <boolProp name="Assertion.assume_success">false</boolProp>
+            <intProp name="Assertion.test_type">16</intProp>
+          </ResponseAssertion>
+          <hashTree/>
+          <!-- JSON path -->
+          <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="Pattern: JSON Path extract (supporting assertion)" enabled="true">
+            <stringProp name="JSONPostProcessor.referenceNames">example_token</stringProp>
+            <stringProp name="JSONPostProcessor.jsonPathExprs">$.token</stringProp>
+            <stringProp name="JSONPostProcessor.match_numbers">1</stringProp>
+            <stringProp name="JSONPostProcessor.defaultValues">NOT_FOUND</stringProp>
+            <stringProp name="JSONPostProcessor.compute_concat">false</stringProp>
+          </JSONPostProcessor>
+          <hashTree/>
+          <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="Pattern: assert JSON path result" enabled="true">
+            <stringProp name="cacheKey">true</stringProp>
+            <stringProp name="filename"></stringProp>
+            <stringProp name="parameters"></stringProp>
+            <stringProp name="script">def v = vars.get(&quot;example_token&quot;)
+if (v == null || v == &quot;NOT_FOUND&quot; || v.isEmpty()) {
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage(&quot;example_token not found in response JSON at $.token&quot;)
+}
+</stringProp>
+            <stringProp name="scriptLanguage">groovy</stringProp>
+          </JSR223Assertion>
+          <hashTree/>
+        </hashTree>
+
+        <!-- =========== Example CSV Data Set Config (plan §4.3) =========== -->
+        <!-- Disabled by default; enable inside the scenario that consumes it.
+             File: data/Sc01_SomeData.csv. Sharing=All threads, recycle=true,
+             stopThread=false. -->
+        <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="Fragment: CSV Data Set (Sc01_SomeData)" enabled="false">
+          <stringProp name="delimiter">,</stringProp>
+          <stringProp name="fileEncoding">UTF-8</stringProp>
+          <stringProp name="filename">data/Sc01_SomeData.csv</stringProp>
+          <boolProp name="ignoreFirstLine">true</boolProp>
+          <boolProp name="quotedData">true</boolProp>
+          <boolProp name="recycle">true</boolProp>
+          <stringProp name="shareMode">shareMode.all</stringProp>
+          <boolProp name="stopThread">false</boolProp>
+          <stringProp name="variableNames">id,name,payload</stringProp>
+        </CSVDataSet>
+        <hashTree/>
+
+      </hashTree>
+
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>

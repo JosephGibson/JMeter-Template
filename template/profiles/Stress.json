@@ -1,0 +1,21 @@
+{
+  "profileName": "Stress",
+  "description": "Above nominal — find degradation point",
+  "mode": "weighted",
+  "load": {
+    "targetSessionsPerHour": 360,
+    "sessionDurationSeconds": 600,
+    "rampUpSeconds": 120,
+    "holdSeconds": 1800,
+    "rampDownSeconds": 120,
+    "estimatedIterationSeconds": 30
+  },
+  "scenarios": [
+    { "id": "Sc01", "weight": 70 },
+    { "id": "Sc02", "weight": 30 }
+  ],
+  "logging": {
+    "level": "INFO",
+    "colors": true
+  }
+}

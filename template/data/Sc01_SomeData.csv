@@ -1,0 +1,4 @@
+id,name,payload
+1,alice,{"type":"alpha"}
+2,bob,{"type":"beta"}
+3,carol,{"type":"gamma"}

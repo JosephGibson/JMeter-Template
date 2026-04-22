@@ -1,0 +1,7 @@
+{
+  "environments": {
+    "dev":     { "scheme": "https", "host": "dev.example.com",     "port": 443 },
+    "staging": { "scheme": "https", "host": "staging.example.com", "port": 443 },
+    "prod":    { "scheme": "https", "host": "www.example.com",     "port": 443 }
+  }
+}

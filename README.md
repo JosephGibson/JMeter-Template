@@ -35,11 +35,18 @@ GUI defaults when `-J` unset: `profile=debug`, `env=dev`, `projectName=debug`.
 
 ## Status
 
-Pre-implementation. See [jmeter-template-plan.md](jmeter-template-plan.md) for full spec; phases 1–8 not yet started.
+Phases 1–8 implemented under [template/](template/). Pending: in-JMeter validation against each phase's acceptance checks (plan §8) — the template was authored on Linux and has not yet been opened in a Windows JMeter GUI.
+
+Implementation notes:
+
+- Module Controller node paths are written as `(displayName, className)` pairs; JMeter may re-link on first GUI save. Verify each Module Controller's target in the GUI before the first CLI run.
+- Every `.jmx` JSR223 block has an HTML header comment stating purpose, props/vars read, and values written.
 
 ## Docs
 
 - [jmeter-template-plan.md](jmeter-template-plan.md) — full design spec, file schemas, phased deliverables, decisions log
+- [docs/Usage.md](docs/Usage.md) — template concept, profile schema, pacing math, HAR cleanup, CSV conventions, proxy, logging
+- [docs/Execution.md](docs/Execution.md) — Record/Build/Debug/Execute flow, launcher arg reference, results folder, pacing-breach interpretation, exit codes
 - [AGENTS.md](AGENTS.md) — LLM operating rules for this repo
 - [docs/LLM_INDEX.md](docs/LLM_INDEX.md) — file map for LLM navigation
 - [CHANGELOG.md](CHANGELOG.md) — release history

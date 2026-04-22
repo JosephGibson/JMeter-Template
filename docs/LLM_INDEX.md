@@ -41,13 +41,39 @@ File map for LLM navigation. Use this before exploring; do not re-derive structu
 | 10 | Open questions |
 | 11 | References (JMeter docs, plugins, tooling) |
 
-## Future paths (not yet present)
+## Template implementation
 
-Per plan §5, the implemented template will live at `./{projectName}/` with:
+Reference implementation under [../template/](../template/):
 
-- `jmeter.jmx` — root test plan
-- `Test_executor.bat` — launcher
-- `environmentVariables.json` — env definitions
-- `data/Sc{NN}_{Purpose}.csv` — per-scenario CSV inputs
-- `profiles/{Load,Soak,Smoke,Stress,Breakpoint,debug}.json` — load profiles
-- `results/` — per-run output (gitignored)
+| Path | Purpose |
+|---|---|
+| [../template/jmeter.jmx](../template/jmeter.jmx) | Root test plan (TestPlan, HTTP Defaults/Header/Cache/Cookie Managers, UDV, Assertion Failure Listener, setUp + Main UTG + tearDown thread groups, Fragments subtree) |
+| [../template/Test_executor.bat](../template/Test_executor.bat) | CLI launcher — arg parsing, runDir creation, JMeter invocation, zip-on-success |
+| [../template/environmentVariables.json](../template/environmentVariables.json) | Server definitions for `dev` / `staging` / `prod` |
+| [../template/profiles/](../template/profiles/) | Six profile JSON files (Load, Soak, Smoke, Stress, Breakpoint, debug) |
+| [../template/data/Sc01_SomeData.csv](../template/data/Sc01_SomeData.csv) | Example CSV input (sharing=All threads, recycle=true, stopThread=false) |
+| `../template/results/` | Per-run runDir + sibling zip (gitignored) |
+
+### .jmx component map
+
+| Component | Role (plan ref) |
+|---|---|
+| HTTP Request Defaults | Scheme/host/port bound to `${__P(scheme)}` / `${__P(host)}` / `${__P(port)}`; proxy bound to `${__P(proxy.host,)}` / `${__P(proxy.port,)}` (§4.7, §4.9) |
+| setUp → SU01 | Config loader + banner + logging module install (§4.1, §4.6, §7.1) |
+| Main Thread Group (UTG) | Sized from derived `concurrentUsers`; single schedule row (§4.1) |
+| Weighted Switch Controller | Rows bound to `${__P(Sc{NN}.weight,1)}` (§4.2) |
+| Module Controllers | Point at `Sc{NN}` Transaction Controllers in Fragments (§4.2) |
+| Fragments → Sc01/Sc02 | Transaction Controllers (generate-parent=true) with pacing pattern (§4.8) |
+| Fragments → Log to File | Disabled JSR223 PostProcessor writing to `${runDir}/custom/{scenario}.log` (§4.10) |
+| Fragments → Proxy-aware HTTP Request | Example sampler overriding proxy (§4.10) |
+| Fragments → Assertion Patterns | Status-only / body-contains / JSON-path examples (§4.10, §4.11) |
+| Fragments → CSV Data Set | Disabled template for per-scenario CSVs (§4.3) |
+| tearDown → TD01 | Closes shared writers, emits summary (§4.4) |
+| LN01 Assertion Failure Summary | JSR223 Listener at TestPlan root; emits error line on any failed assertion (§4.6) |
+
+## Execution docs
+
+| Path | Purpose |
+|---|---|
+| [Usage.md](Usage.md) | Template concept, profile schema, pacing math, HAR-to-JMX workflow, CSV conventions, proxy, logging API |
+| [Execution.md](Execution.md) | Dev flow (Record/Build/Debug/Execute), GUI vs CLI behavior, launcher arg reference, results folder contents, pacing breach interpretation, exit codes |
