@@ -64,13 +64,12 @@ if not exist "%SCRIPT_DIR%\jmeter.jmx" (
   exit /b 2
 )
 
-rem --- Timestamp yyyyMMdd_HHmmss via wmic (locale-independent) ---
-for /f "usebackq tokens=2 delims==" %%I in (`wmic os get LocalDateTime /value 2^>NUL ^| findstr "="`) do set "LDT=%%I"
-if "%LDT%"=="" (
-  echo [FATAL] Could not determine timestamp via wmic.
+rem --- Timestamp yyyyMMdd_HHmmss. Prefer Java 17; fall back without PowerShell. ---
+call :make_timestamp
+if "%TS%"=="" (
+  echo [FATAL] Could not determine timestamp.
   exit /b 3
 )
-set "TS=%LDT:~0,8%_%LDT:~8,6%"
 set "RUN_NAME=%PROJECT%_%TS%"
 set "RUN_DIR=%RESULTS_ROOT%\%RUN_NAME%"
 set "ZIP_FILE=%RESULTS_ROOT%\%RUN_NAME%.zip"
@@ -85,11 +84,13 @@ mkdir "%RUN_DIR%"
 mkdir "%RUN_DIR%\custom"
 mkdir "%RUN_DIR%\report"
 
-rem --- Assemble -J flags ---
-set "JFLAGS=-Jprofile=%PROFILE% -Jenv=%ENVNAME% -JprojectName=%PROJECT% -JresultsRootDir=%RESULTS_ROOT% -JrunDir=%RUN_DIR%"
-if not "%MODE%"==""       set "JFLAGS=%JFLAGS% -Jmode=%MODE%"
-if not "%PROXY_HOST%"=="" set "JFLAGS=%JFLAGS% -Jproxy.host=%PROXY_HOST%"
-if not "%PROXY_PORT%"=="" set "JFLAGS=%JFLAGS% -Jproxy.port=%PROXY_PORT%"
+rem --- Optional -J flags. Mandatory -J flags are quoted directly at invocation. ---
+set "MODE_FLAG="
+set "PROXY_HOST_FLAG="
+set "PROXY_PORT_FLAG="
+if not "%MODE%"==""       set "MODE_FLAG=-Jmode=%MODE%"
+if not "%PROXY_HOST%"=="" set "PROXY_HOST_FLAG=-Jproxy.host=%PROXY_HOST%"
+if not "%PROXY_PORT%"=="" set "PROXY_PORT_FLAG=-Jproxy.port=%PROXY_PORT%"
 
 rem --- JMeter output paths ---
 set "JTL=%RUN_DIR%\raw.jtl"
@@ -104,7 +105,7 @@ echo.
 rem JMeter CLI generates the HTML dashboard inline with -e -o.
 rem The -o directory must not exist OR must be empty; we just created it empty.
 rem Per §4.7, listeners are disabled in the .jmx — CLI relies on -l for JTL output.
-call jmeter.bat -n -t "%SCRIPT_DIR%\jmeter.jmx" -l "%JTL%" -j "%JLOG%" -e -o "%HTML%" %JFLAGS%
+call jmeter.bat -n -t "%SCRIPT_DIR%\jmeter.jmx" -l "%JTL%" -j "%JLOG%" -e -o "%HTML%" "-Jprofile=%PROFILE%" "-Jenv=%ENVNAME%" "-JprojectName=%PROJECT%" "-JresultsRootDir=%RESULTS_ROOT%" "-JrunDir=%RUN_DIR%" %MODE_FLAG% %PROXY_HOST_FLAG% %PROXY_PORT_FLAG%
 set "JMX_EXIT=%ERRORLEVEL%"
 
 if not "%JMX_EXIT%"=="0" (
@@ -127,6 +128,75 @@ if not "%ZIP_EXIT%"=="0" (
 )
 
 echo [INFO] Done.
+exit /b 0
+
+:make_timestamp
+set "TS="
+if "%TEMP%"=="" goto timestamp_java_done
+set "TS_HELPER=%TEMP%\jmeter_template_timestamp_%RANDOM%%RANDOM%.java"
+> "%TS_HELPER%" echo import java.time.LocalDateTime;
+>> "%TS_HELPER%" echo import java.time.format.DateTimeFormatter;
+>> "%TS_HELPER%" echo class JMeterTemplateTimestamp {
+>> "%TS_HELPER%" echo   public static void main(String[] args) {
+>> "%TS_HELPER%" echo     System.out.print(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")));
+>> "%TS_HELPER%" echo   }
+>> "%TS_HELPER%" echo }
+for /f "usebackq delims=" %%I in (`java "%TS_HELPER%" 2^>NUL`) do set "TS=%%I"
+if exist "%TS_HELPER%" del /q "%TS_HELPER%" >NUL 2>NUL
+:timestamp_java_done
+if not "%TS%"=="" exit /b 0
+
+rem Fallback for older hosts. wmic is deprecated, so this is intentionally secondary.
+set "LDT="
+for /f "usebackq tokens=2 delims==" %%I in (`wmic os get LocalDateTime /value 2^>NUL ^| findstr "="`) do set "LDT=%%I"
+if not "%LDT%"=="" (
+  set "TS=%LDT:~0,8%_%LDT:~8,6%"
+  exit /b 0
+)
+
+rem Last-resort locale-tolerant parse of common Windows DATE/TIME formats.
+call :timestamp_from_env
+exit /b 0
+
+:timestamp_from_env
+set "DATE_TEXT=%DATE%"
+set "TIME_TEXT=%TIME: =0%"
+set "P1="
+set "P2="
+set "P3="
+set "P4="
+set "Y="
+set "M="
+set "D="
+for /f "tokens=1-4 delims=/-. " %%A in ("%DATE_TEXT%") do (
+  set "P1=%%A"
+  set "P2=%%B"
+  set "P3=%%C"
+  set "P4=%%D"
+)
+if not "!P1:~3,1!"=="" if "!P1:~4,1!"=="" (
+  set "Y=!P1!"
+  set "M=!P2!"
+  set "D=!P3!"
+  goto timestamp_from_env_build
+)
+if not "!P4!"=="" if not "!P4:~3,1!"=="" if "!P4:~4,1!"=="" (
+  set "Y=!P4!"
+  set "M=!P2!"
+  set "D=!P3!"
+  goto timestamp_from_env_build
+)
+if not "!P3:~3,1!"=="" if "!P3:~4,1!"=="" (
+  set "Y=!P3!"
+  set "M=!P1!"
+  set "D=!P2!"
+)
+:timestamp_from_env_build
+if "!M:~1,1!"=="" set "M=0!M!"
+if "!D:~1,1!"=="" set "D=0!D!"
+if not "!Y!"=="" if not "!M!"=="" if not "!D!"=="" (
+  set "TS=!Y!!M!!D!_!TIME_TEXT:~0,2!!TIME_TEXT:~3,2!!TIME_TEXT:~6,2!"
+)
 exit /b 0
 
 :usage

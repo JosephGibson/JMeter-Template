@@ -11,7 +11,7 @@ Hard rules (plan §3):
 - One `.jmx` per project.
 - No code duplication across scenarios — share via Test Fragments + Module Controllers.
 - Scenario IDs: `Sc01`, `Sc02`, ... (zero-padded, two digits).
-- 15–25 HTTP calls per scenario.
+- Adapted project scenarios should contain 15–25 meaningful HTTP calls; the committed Sc01/Sc02 flows are short scaffolds for template mechanics.
 - Every sampler has at least one assertion.
 - Listeners disabled in the `.jmx`; CLI writes JTL via `-l`.
 - No run ever overwrites a prior run.
@@ -85,7 +85,7 @@ Field reference:
 | `load.estimatedIterationSeconds` | Rough time all samplers consume; feeds the think-time budget |
 | `scenarios[].id` | Scenario ID, must match a Transaction Controller in the Fragments subtree |
 | `scenarios[].weight` | Used only when `mode: "weighted"`; must be `> 0` |
-| `logging.level` | `INFO` / `WARN` / `ERROR` |
+| `logging.level` | `INFO` / `WARN` / `ERROR`; `-Jlog.level` overrides |
 | `logging.colors` | Force ANSI colors; `-Jlog.colors` overrides |
 
 In `sequential` mode the loader ignores `weight` and publishes `1` for every scenario, which makes the Weighted Switch Controller deterministic round-robin (plan §4.2).
@@ -128,6 +128,8 @@ Actual pacing is enforced **per iteration**, not per sampler — a scenario that
 3. **Flow Control Action Pause(0)** as last child of the Transaction Controller.
 4. Child **Constant Timer** with `${DELAY_TIME}` delay.
 
+The scenario Transaction Controller is configured to generate a parent sample and include timers, so scenario-level timings represent the full paced session duration.
+
 ## 5. Distribution modes
 
 - **`weighted`**: each scenario's `weight` is used as its share (e.g. 70/30 → 70% Sc01, 30% Sc02 over many iterations).
@@ -144,6 +146,7 @@ Override via `--mode weighted|sequential` (or `-Jmode=...`) without editing the 
 5. In your `jmeter.jmx` (GUI):
    - Duplicate `Sc01` Transaction Controller in the Fragments subtree and rename it `Sc{NN}`.
    - Paste your cleaned samplers in order.
+   - Build out the real flow to 15–25 meaningful HTTP calls; the committed 3-call scaffolds are only placeholders.
    - Keep the PreProcessor on the first sampler and the PostProcessor on the last.
    - Adjust the Think Time Timer count so there is one between every pair of consecutive samplers.
    - Keep the Pacing Anchor + Pacing Timer block at the end.
@@ -193,6 +196,7 @@ Logger installed at setUp and stored as `props["log"]`. Accessible from any JSR2
 
 ```groovy
 def log = props.get("log")
+log.info("Loaded reusable fragment")
 log.info("Sc01/step2",  "Submitting order payload")
 log.warn("Sc01",        "Pacing breach: ...")
 log.error("Sc01/step3", "Expected 200, got 502 — server may be overloaded")
@@ -201,6 +205,6 @@ log.table([[url:"/a", ms:120], [url:"/b", ms:90]])
 log.errorSummary("Sc01", "step3", "200", "502", "server may be overloaded")
 ```
 
-Line format: `[yyyy-MM-dd HH:mm:ss] [LEVEL] [scenario/step] message`.
+Line format in stdout and the custom `jmeter.log` message: `[yyyy-MM-dd HH:mm:ss] [LEVEL] [scenario/step] message`.
 
-ANSI colors enabled when Windows Terminal is detected (`WT_SESSION` non-null) or forced via `-Jlog.colors=true`.
+`logging.level` / `logging.colors` from the profile are the base values. Override with `-Jlog.level=INFO|WARN|ERROR` or `-Jlog.colors=true|false`; if no colors value is set, Windows Terminal detection (`WT_SESSION`) enables ANSI automatically.

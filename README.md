@@ -41,6 +41,7 @@ Implementation notes:
 
 - Module Controller node paths are written as `(displayName, className)` pairs; JMeter may re-link on first GUI save. Verify each Module Controller's target in the GUI before the first CLI run.
 - Every `.jmx` JSR223 block has an HTML header comment stating purpose, props/vars read, and values written.
+- Sc01/Sc02 are short scaffolds for template mechanics; adapted project scenarios should expand or replace them with 15–25 meaningful HTTP calls.
 
 ## Docs
 

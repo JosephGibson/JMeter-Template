@@ -14,3 +14,11 @@ All notable changes to this project are documented here. Format: [Keep a Changel
   - [template/profiles/](template/profiles/) — Load, Soak, Smoke, Stress, Breakpoint, debug (plan §6.2 schema).
   - [template/data/Sc01_SomeData.csv](template/data/Sc01_SomeData.csv) — example CSV input.
 - Phase 8 documentation: [docs/Usage.md](docs/Usage.md) (template concept, profile schema, pacing math, HAR cleanup, CSV conventions, proxy, logging) and [docs/Execution.md](docs/Execution.md) (dev flow, GUI vs CLI, arg reference, results folder, pacing breach interpretation, exit codes).
+
+### Fixed
+- Hardened [template/Test_executor.bat](template/Test_executor.bat) for paths containing spaces by quoting mandatory `-J` arguments and removing the single unquoted `JFLAGS` blob.
+- Replaced the launcher's hard dependency on deprecated `wmic` timestamps with a Java 17 timestamp helper plus `wmic` / `%DATE%` fallback paths, without adding PowerShell.
+- Wired profile logging settings and `-Jlog.level` / `-Jlog.colors` overrides into the JMeter logging module, and preserved scenario/step context in `jmeter.log`.
+- Changed scenario Transaction Controller parent samples to include timers so scenario timings reflect the full paced session duration.
+- Added a status assertion to the disabled proxy-aware HTTP sampler example so copied HTTP sampler fragments preserve the assertion rule.
+- Clarified documentation that committed Sc01/Sc02 flows are short scaffolds and adapted project scenarios should expand or replace them with 15–25 meaningful HTTP calls.

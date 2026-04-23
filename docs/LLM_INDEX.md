@@ -47,7 +47,7 @@ Reference implementation under [../template/](../template/):
 
 | Path | Purpose |
 |---|---|
-| [../template/jmeter.jmx](../template/jmeter.jmx) | Root test plan (TestPlan, HTTP Defaults/Header/Cache/Cookie Managers, UDV, Assertion Failure Listener, setUp + Main UTG + tearDown thread groups, Fragments subtree) |
+| [../template/jmeter.jmx](../template/jmeter.jmx) | Root test plan (TestPlan, HTTP Defaults/Header/Cache/Cookie Managers, UDV, Assertion Failure Listener, setUp + Main UTG + tearDown thread groups, Fragments subtree with short Sc01/Sc02 scaffolds) |
 | [../template/Test_executor.bat](../template/Test_executor.bat) | CLI launcher — arg parsing, runDir creation, JMeter invocation, zip-on-success |
 | [../template/environmentVariables.json](../template/environmentVariables.json) | Server definitions for `dev` / `staging` / `prod` |
 | [../template/profiles/](../template/profiles/) | Six profile JSON files (Load, Soak, Smoke, Stress, Breakpoint, debug) |
@@ -59,11 +59,11 @@ Reference implementation under [../template/](../template/):
 | Component | Role (plan ref) |
 |---|---|
 | HTTP Request Defaults | Scheme/host/port bound to `${__P(scheme)}` / `${__P(host)}` / `${__P(port)}`; proxy bound to `${__P(proxy.host,)}` / `${__P(proxy.port,)}` (§4.7, §4.9) |
-| setUp → SU01 | Config loader + banner + logging module install (§4.1, §4.6, §7.1) |
+| setUp → SU01 | Config loader + banner + logging module install, including profile/`-Jlog.*` logging overrides (§4.1, §4.6, §7.1) |
 | Main Thread Group (UTG) | Sized from derived `concurrentUsers`; single schedule row (§4.1) |
 | Weighted Switch Controller | Rows bound to `${__P(Sc{NN}.weight,1)}` (§4.2) |
 | Module Controllers | Point at `Sc{NN}` Transaction Controllers in Fragments (§4.2) |
-| Fragments → Sc01/Sc02 | Transaction Controllers (generate-parent=true) with pacing pattern (§4.8) |
+| Fragments → Sc01/Sc02 | Scaffold Transaction Controllers (generate-parent=true, include-timers=true) with pacing pattern (§4.8) |
 | Fragments → Log to File | Disabled JSR223 PostProcessor writing to `${runDir}/custom/{scenario}.log` (§4.10) |
 | Fragments → Proxy-aware HTTP Request | Example sampler overriding proxy (§4.10) |
 | Fragments → Assertion Patterns | Status-only / body-contains / JSON-path examples (§4.10, §4.11) |

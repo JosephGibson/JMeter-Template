@@ -24,7 +24,7 @@ Open `jmeter.jmx` in the JMeter GUI (5.6.3 + Ultimate Thread Group + Weighted Sw
 - **Defaults when no `-J` props are set**: `profile=debug`, `env=dev`, `projectName=debug`.
 - `-J` properties always override profile values (Decision #10).
 - Override precedence: profile file is base; `-J` wins.
-- `jmeter.log` is truncated at setUp so each GUI run starts fresh.
+- The detected `jmeter.log` candidates are truncated at setUp so each GUI run starts fresh.
 - The banner does **not** print in GUI (only in CLI).
 - GUI runs do not produce `runDir/` and do not produce a zip.
 
@@ -72,7 +72,7 @@ Test_executor.bat --profile Load --env dev --project acme --proxy-host 127.0.0.1
 The launcher:
 
 1. Validates required args.
-2. Resolves a locale-independent timestamp via `wmic os get LocalDateTime`.
+2. Resolves a `yyyyMMdd_HHmmss` timestamp via Java 17, with deprecated `wmic` and common `%DATE%/%TIME%` formats as fallbacks. PowerShell is never used.
 3. Creates `runDir = results/<project>_<yyyyMMdd_HHmmss>/` (fails if it already exists).
 4. Invokes `jmeter.bat -n -t jmeter.jmx -l raw.jtl -j jmeter.log -e -o report -J...`.
 5. On JMeter exit 0, zips `runDir/` to a sibling `.zip` via bundled `tar.exe -a -cf`.
@@ -149,7 +149,7 @@ Note: a single breach is normal noise. **Sustained breaches** (>5 % of iteration
 | `0`  | launcher | Full success — JMeter OK, zip OK |
 | `1`  | launcher | Arg parse failure (missing/invalid flag) |
 | `2`  | launcher | Missing file: profile, environmentVariables.json, or jmeter.jmx |
-| `3`  | launcher | Could not compute timestamp via `wmic` |
+| `3`  | launcher | Could not compute timestamp |
 | `4`  | launcher | `runDir` already exists (timestamp collision — shouldn't happen) |
 | `<n>` | JMeter  | JMeter's own exit code; zip step is skipped |
 

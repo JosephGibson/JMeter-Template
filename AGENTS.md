@@ -15,7 +15,7 @@ The plan is the source of truth. README/AGENTS/INDEX must not contradict it; if 
 - One `.jmx` per project. Reuse pattern is copy-and-modify, not parameterize.
 - No code duplication across scenarios — share via Test Fragments + Module Controllers.
 - Scenario IDs: `Sc01`, `Sc02`, ... (zero-padded, two digits).
-- 15–25 HTTP calls per scenario.
+- Adapted project scenarios should contain 15–25 meaningful HTTP calls. The committed Sc01/Sc02 flows are short scaffolds for template mechanics and are expanded or replaced during project build-out.
 - Dev flow: Record → Build in GUI → Debug in GUI → Execute in CLI.
 - HAR is the primary recording input (BlazeMeter converter).
 - **No PowerShell.** Launcher is `.bat` only.

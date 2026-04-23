@@ -142,9 +142,9 @@ results.each { ar -&gt;
                            concurrentUsers,rampUpSeconds,holdSeconds,
                            rampDownSeconds,pacingMs,thinkTimeBudgetMs,
                            estimatedIterationSec, {ScID}.weight...,
-                           log (logging module)]
+                           log.level, log.colors, log (logging module)]
                      {runDir}/effective-config.json (CLI only)
-             GUI:    truncates jmeter.log; auto-loads debug defaults
+             GUI:    truncates detected jmeter.log candidates; auto-loads debug defaults
                      when -J props are unset.
              ============================================================ -->
         <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="SU01 Load Config + Banner" enabled="true">
@@ -167,24 +167,40 @@ def buildLogger = { -&gt;
         return System.getenv(&quot;WT_SESSION&quot;) != null
     }
     def color = { String t, String c -&gt; colorsEnabled() ? (ANSI[c] + t + ANSI.reset) : t }
+    def levels = [INFO:10, WARN:20, ERROR:30]
+    def levelEnabled = { String level -&gt;
+        def configured = (props.get(&quot;log.level&quot;) ?: &quot;INFO&quot;).toString().trim().toUpperCase()
+        def threshold = levels[configured] ?: levels.INFO
+        return (levels[level] ?: levels.INFO) &gt;= threshold
+    }
     def ts = { -&gt; new java.text.SimpleDateFormat(&quot;yyyy-MM-dd HH:mm:ss&quot;).format(new Date()) }
     def emit = { String level, String where, String msg -&gt;
+        if (!levelEnabled(level)) return
+        def when = ts()
+        def cleanWhere = where ?: &quot;-&quot;
+        def plainLevel = level.padRight(5)
         def c = [INFO:&quot;cyan&quot;, WARN:&quot;yellow&quot;, ERROR:&quot;red&quot;][level]
-        def lvl = c ? color(level.padRight(5), c) : level.padRight(5)
-        def line = &quot;[&quot; + ts() + &quot;] [&quot; + lvl + &quot;] [&quot; + where + &quot;] &quot; + msg
+        def consoleLevel = c ? color(plainLevel, c) : plainLevel
+        def consoleLine = &quot;[&quot; + when + &quot;] [&quot; + consoleLevel + &quot;] [&quot; + cleanWhere + &quot;] &quot; + msg
+        def logLine = &quot;[&quot; + when + &quot;] [&quot; + plainLevel + &quot;] [&quot; + cleanWhere + &quot;] &quot; + msg
         synchronized(lock) {
-            println line
+            println consoleLine
             switch(level) {
-                case &quot;INFO&quot;:  tmplLog.info(msg); break
-                case &quot;WARN&quot;:  tmplLog.warn(msg); break
-                case &quot;ERROR&quot;: tmplLog.error(msg); break
+                case &quot;INFO&quot;:  tmplLog.info(logLine); break
+                case &quot;WARN&quot;:  tmplLog.warn(logLine); break
+                case &quot;ERROR&quot;: tmplLog.error(logLine); break
             }
         }
     }
+    def splitLogArgs = { Object[] a -&gt;
+        if (a == null || a.length == 0) return [&quot;-&quot;, &quot;&quot;]
+        if (a.length == 1) return [&quot;-&quot;, a[0]?.toString()]
+        return [a[0]?.toString(), a[1]?.toString()]
+    }
     return [
-        info:  { String where, String msg -&gt; emit(&quot;INFO&quot;, where, msg) },
-        warn:  { String where, String msg -&gt; emit(&quot;WARN&quot;, where, msg) },
-        error: { String where, String msg -&gt; emit(&quot;ERROR&quot;, where, msg) },
+        info:  { Object... a -&gt; def parts = splitLogArgs(a); emit(&quot;INFO&quot;, parts[0], parts[1]) },
+        warn:  { Object... a -&gt; def parts = splitLogArgs(a); emit(&quot;WARN&quot;, parts[0], parts[1]) },
+        error: { Object... a -&gt; def parts = splitLogArgs(a); emit(&quot;ERROR&quot;, parts[0], parts[1]) },
         banner: { String title, Map kvs -&gt;
             def keyW = (kvs.keySet().collect { it.toString().length() }.max() ?: 20)
             def valW = (kvs.values().collect { it.toString().length() }.max() ?: 20)
@@ -235,8 +251,17 @@ def baseDir = FileServer.getFileServer().getBaseDir()
 // ---------- GUI: truncate jmeter.log on each run ----------
 if (inGui) {
     try {
-        def lf = new File(baseDir, &quot;jmeter.log&quot;)
-        if (lf.exists()) { new FileOutputStream(lf, false).close() }
+        def candidates = [
+            new File(baseDir, &quot;jmeter.log&quot;),
+            new File(System.getProperty(&quot;user.dir&quot;), &quot;jmeter.log&quot;)
+        ]
+        [&quot;jmeter.logfile&quot;,&quot;jmeterlogfile&quot;,&quot;log_file&quot;].each { k -&gt;
+            def v = props.get(k)
+            if (v) candidates &lt;&lt; new File(v.toString())
+        }
+        candidates.findAll { it != null }.unique { it.absolutePath }.each { f -&gt;
+            try { new FileOutputStream(f, false).close() } catch (Throwable ignored) { /* ignore candidate */ }
+        }
     } catch (Throwable t) { /* ignore */ }
 }
 
@@ -311,6 +336,26 @@ if (!(profile.scenarios instanceof List) || profile.scenarios.isEmpty()) {
 def mode = modeOverride ?: profile.mode
 if (!(mode in [&quot;weighted&quot;,&quot;sequential&quot;])) fatal(&quot;Invalid mode: &quot; + mode)
 
+// ---------- logging config: profile base; -Jlog.* overrides ----------
+def loggingCfg = (profile.logging instanceof Map) ? profile.logging : [:]
+def resolvedLogLevel = (props.get(&quot;log.level&quot;) ?: loggingCfg.level ?: &quot;INFO&quot;).toString().trim().toUpperCase()
+if (!(resolvedLogLevel in [&quot;INFO&quot;,&quot;WARN&quot;,&quot;ERROR&quot;])) {
+    fatal(&quot;Invalid logging.level: &quot; + resolvedLogLevel + &quot; (expected INFO|WARN|ERROR)&quot;)
+}
+props.put(&quot;log.level&quot;, resolvedLogLevel)
+
+def parseBooleanConfig = { raw, String label -&gt;
+    if (raw == null) return null
+    def s = raw.toString().trim().toLowerCase()
+    if (!(s in [&quot;true&quot;,&quot;false&quot;])) fatal(&quot;Invalid &quot; + label + &quot;: &quot; + raw + &quot; (expected true|false)&quot;)
+    return s == &quot;true&quot;
+}
+def colorsRaw = props.get(&quot;log.colors&quot;)
+if (colorsRaw == null &amp;&amp; loggingCfg.containsKey(&quot;colors&quot;)) colorsRaw = loggingCfg.colors
+def resolvedLogColors = parseBooleanConfig(colorsRaw, &quot;log.colors&quot;)
+if (resolvedLogColors != null) props.put(&quot;log.colors&quot;, resolvedLogColors.toString())
+def effectiveLogColors = (resolvedLogColors != null) ? resolvedLogColors : (System.getenv(&quot;WT_SESSION&quot;) != null)
+
 // ---------- derived math (closed-user model, plan §4.1) ----------
 def sessSec = profile.load.sessionDurationSeconds as double
 def tph     = profile.load.targetSessionsPerHour as double
@@ -375,7 +420,7 @@ if (!inGui &amp;&amp; runDir) {
             thinkTimeBudgetSeconds: thinkBudgetSec
         ],
         scenarios: profile.scenarios.collect { [id: it.id, weight: runtimeWeights[it.id]] },
-        logging: profile.logging ?: [level: &quot;INFO&quot;, colors: true],
+        logging: [level: resolvedLogLevel, colors: effectiveLogColors],
         proxy: [ host: (props.get(&quot;proxy.host&quot;) ?: null), port: (props.get(&quot;proxy.port&quot;) ?: null) ]
     ]
     new File(rd, &quot;effective-config.json&quot;).text = new JsonBuilder(effective).toPrettyString()
@@ -564,7 +609,7 @@ SampleResult.setResponseMessage(msg)
         <!-- =========== Sc01 Transaction Controller (plan §4.2, §4.8) =========== -->
         <TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="Sc01" enabled="true">
           <boolProp name="TransactionController.parent">true</boolProp>
-          <boolProp name="TransactionController.includeTimers">false</boolProp>
+          <boolProp name="TransactionController.includeTimers">true</boolProp>
         </TransactionController>
         <hashTree>
 
@@ -726,7 +771,7 @@ if (remaining &lt; 0L) {
         <!-- =========== Sc02 Transaction Controller (plan §4.2, §4.8) =========== -->
         <TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="Sc02" enabled="true">
           <boolProp name="TransactionController.parent">true</boolProp>
-          <boolProp name="TransactionController.includeTimers">false</boolProp>
+          <boolProp name="TransactionController.includeTimers">true</boolProp>
         </TransactionController>
         <hashTree>
 
@@ -946,7 +991,18 @@ synchronized(w) { w.println(line) }
           <stringProp name="HTTPSampler.proxyHost">${__P(proxy.host,)}</stringProp>
           <stringProp name="HTTPSampler.proxyPort">${__P(proxy.port,)}</stringProp>
         </HTTPSamplerProxy>
-        <hashTree/>
+        <hashTree>
+          <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="status 2xx" enabled="true">
+            <collectionProp name="Asserion.test_strings">
+              <stringProp name="a1">2\d\d</stringProp>
+            </collectionProp>
+            <stringProp name="Assertion.custom_message">Expected 2xx HTTP status</stringProp>
+            <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+            <boolProp name="Assertion.assume_success">false</boolProp>
+            <intProp name="Assertion.test_type">1</intProp>
+          </ResponseAssertion>
+          <hashTree/>
+        </hashTree>
 
         <!-- =========== Fragment: Assertion Patterns (plan §4.10, §4.11) =========== -->
         <GenericController guiclass="LogicControllerGui" testclass="GenericController" testname="Fragment: Assertion Patterns" enabled="false"/>

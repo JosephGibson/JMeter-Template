@@ -20,7 +20,7 @@ Reusable JMeter template for API and webflow load tests. Configured via profile 
 - One `.jmx` per project; copy-and-modify is the reuse pattern.
 - No code duplication across scenarios.
 - Scenario ID format: `Sc01`, `Sc02`, ... (zero-padded, two digits).
-- Scenarios may contain 15–25 HTTP calls.
+- Adapted project scenarios should contain 15–25 meaningful HTTP calls. The committed Sc01/Sc02 flows are short scaffolds that demonstrate the template mechanics and are expanded or replaced during project build-out.
 - Dev flow: Record → Build in GUI → Debug in GUI → Execute in CLI.
 - Template root: `./{projectName}/` (all paths in this plan are relative to that root unless marked otherwise).
 - HAR is the primary recording input.
@@ -45,7 +45,7 @@ Reusable JMeter template for API and webflow load tests. Configured via profile 
 - Both distribution modes are implemented with the **Weighted Switch Controller**:
   - `weighted` → user-defined weights from `scenarios[].weight`.
   - `sequential` → config loader publishes weight `1` for every enabled scenario; with Random Choice off, the Weighted Switch Controller yields deterministic round-robin selection for equal weights.
-- Each scenario is a Transaction Controller with generate-parent-sample enabled.
+- Each scenario is a Transaction Controller with generate-parent-sample enabled and timer duration included in the parent sample, so scenario-level results reflect the full paced session duration.
 - Scenarios defined once inside a disabled **Test Fragment**, referenced from the Weighted Switch Controller via **Module Controllers**. Required: the Weighted Switch Controller only runs the first direct child per iteration, so each scenario must be a single controller, not a flat list of samplers.
 
 ### 4.3 Data Handling
@@ -88,13 +88,14 @@ Test_executor.bat --profile <name> --env <name> --project <name>
 ### 4.6 Logging & Debugging
 
 - Logging module loaded in setUp, stored as `props["log"]`:
-  - `log.info(msg)`, `log.warn(msg)`, `log.error(msg)`
+  - `log.info(where, msg)`, `log.warn(where, msg)`, `log.error(where, msg)`; one-argument `log.info(msg)` shorthand uses `-` as the context.
   - `log.banner(title, map)` — ANSI-colored boxed key/value output
   - `log.table(rows)` — pretty-printed tabular data
   - `log.errorSummary(scenario, step, expected, actual, hint)` — tester-friendly failure line
 - Logging helpers must be thread-safe; JMeter worker threads will call them concurrently.
 - Line format: `[yyyy-MM-dd HH:mm:ss] [LEVEL] [scenario/step] message`
-- ANSI colors enabled when `System.getenv("WT_SESSION")` is non-null (Windows Terminal detected) or `-Jlog.colors=true`; fall back to plain text otherwise.
+- `logging.level` defaults to `INFO`; `-Jlog.level=INFO|WARN|ERROR` overrides it.
+- ANSI colors use profile `logging.colors` as the base; `-Jlog.colors=true|false` overrides it. If neither is set, `System.getenv("WT_SESSION")` auto-enables colors in Windows Terminal and plain text is used elsewhere.
 - GUI mode:
   - Truncates `jmeter.log` at setUp.
   - Auto-loads `debug.json` when `-Jprofile` is unset.
@@ -237,6 +238,7 @@ Profile type conventions:
 | `mode` | `--mode` (optional) | Overrides profile's `mode` |
 | `proxy.host` | `--proxy-host` (optional) | HTTP proxy host |
 | `proxy.port` | `--proxy-port` (optional) | HTTP proxy port |
+| `log.level` | (optional) | Override profile logging level (`INFO`, `WARN`, `ERROR`) |
 | `log.colors` | (optional) | Force ANSI on/off |
 | `resultsRootDir` | `--results-root` (optional) | Override default `./results/` |
 | `runDir` | launcher-generated | Per-run output directory passed into JMeter |
@@ -312,7 +314,7 @@ Acceptance: `jmeter -n -t jmeter.jmx -Jprofile=Load -Jenv=dev -JprojectName=acme
 ### Phase 3 — Sc01 End-to-End
 
 Deliverables:
-- Sc01 Transaction Controller (generate parent: true) in the Fragments subtree, containing 2–3 HTTP samplers.
+- Sc01 Transaction Controller (generate parent: true, include timers: true) in the Fragments subtree, containing a short 3-sampler scaffold. Adapted project scenarios still expand or replace this scaffold to meet the 15–25 call target in §3.
 - Response Assertion on each sampler.
 - Constant Timer between samplers using `thinkTimeBudgetMs / max(nSamplers − 1, 1)`.
 - Pacing per §4.8 (PreProcessor, PostProcessor, Flow Control Action + child Constant Timer).
@@ -390,6 +392,10 @@ Acceptance: a new tester configures and runs a test unassisted.
 | 16 | HTML report generation | JMeter CLI `-e -o` into `${runDir}/report/` |
 | 17 | Zip mechanism | `tar.exe -a -cf` from the launcher after JMeter exits successfully |
 | 18 | CSV sharing | All threads / recycle on EOF / don't stop thread on EOF |
+| 19 | Launcher timestamp | Prefer Java 17 source-file timestamp helper; fall back to deprecated `wmic` and then common `%DATE%/%TIME%` formats; never use PowerShell |
+| 20 | Logging overrides | Profile logging config is the base; `-Jlog.level` / `-Jlog.colors` override; logger writes full contextual lines to both stdout and `jmeter.log` |
+| 21 | Scenario parent timing | Transaction Controller parent samples include timers so scenario samples reflect full paced session duration |
+| 22 | Scenario scaffold size | Committed Sc01/Sc02 are short scaffolds for template mechanics; adapted project scenarios should expand/replace them with 15–25 meaningful HTTP calls |
 
 ## 10. Open Questions
 
