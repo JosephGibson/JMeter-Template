@@ -8,7 +8,6 @@ rem   - parse CLI args
 rem   - create per-run output directory
 rem   - invoke jmeter.bat in non-GUI mode
 rem   - propagate exit code
-rem   - zip runDir on success via bundled tar.exe
 rem See jmeter-template-plan.md sections 4.4 and 4.5.
 rem =====================================================================
 
@@ -72,7 +71,6 @@ if "%TS%"=="" (
 )
 set "RUN_NAME=%PROJECT%_%TS%"
 set "RUN_DIR=%RESULTS_ROOT%\%RUN_NAME%"
-set "ZIP_FILE=%RESULTS_ROOT%\%RUN_NAME%.zip"
 
 rem --- Create run directory tree ---
 if not exist "%RESULTS_ROOT%" mkdir "%RESULTS_ROOT%"
@@ -88,9 +86,9 @@ rem --- Optional -J flags. Mandatory -J flags are quoted directly at invocation.
 set "MODE_FLAG="
 set "PROXY_HOST_FLAG="
 set "PROXY_PORT_FLAG="
-if not "%MODE%"==""       set "MODE_FLAG=-Jmode=%MODE%"
-if not "%PROXY_HOST%"=="" set "PROXY_HOST_FLAG=-Jproxy.host=%PROXY_HOST%"
-if not "%PROXY_PORT%"=="" set "PROXY_PORT_FLAG=-Jproxy.port=%PROXY_PORT%"
+if not "%MODE%"==""       set MODE_FLAG="-Jmode=%MODE%"
+if not "%PROXY_HOST%"=="" set PROXY_HOST_FLAG="-Jproxy.host=%PROXY_HOST%"
+if not "%PROXY_PORT%"=="" set PROXY_PORT_FLAG="-Jproxy.port=%PROXY_PORT%"
 
 rem --- JMeter output paths ---
 set "JTL=%RUN_DIR%\raw.jtl"
@@ -105,29 +103,17 @@ echo.
 rem JMeter CLI generates the HTML dashboard inline with -e -o.
 rem The -o directory must not exist OR must be empty; we just created it empty.
 rem Per §4.7, listeners are disabled in the .jmx — CLI relies on -l for JTL output.
-call jmeter.bat -n -t "%SCRIPT_DIR%\jmeter.jmx" -l "%JTL%" -j "%JLOG%" -e -o "%HTML%" "-Jprofile=%PROFILE%" "-Jenv=%ENVNAME%" "-JprojectName=%PROJECT%" "-JresultsRootDir=%RESULTS_ROOT%" "-JrunDir=%RUN_DIR%" %MODE_FLAG% %PROXY_HOST_FLAG% %PROXY_PORT_FLAG%
+call jmeter.bat -n -t "%SCRIPT_DIR%\jmeter.jmx" -l "%JTL%" -j "%JLOG%" -e -o "%HTML%" "-Jprofile=%PROFILE%" "-Jenv=%ENVNAME%" "-JprojectName=%PROJECT%" "-JrunDir=%RUN_DIR%" %MODE_FLAG% %PROXY_HOST_FLAG% %PROXY_PORT_FLAG%
 set "JMX_EXIT=%ERRORLEVEL%"
 
 if not "%JMX_EXIT%"=="0" (
   echo.
-  echo [ERROR] JMeter exited with code %JMX_EXIT% — skipping zip step.
+  echo [ERROR] JMeter exited with code %JMX_EXIT%.
   exit /b %JMX_EXIT%
 )
 
-rem --- Zip runDir using bundled tar.exe (Windows 10+). -a selects format by extension.
 echo.
-echo [INFO] Packaging results: %ZIP_FILE%
-pushd "%RESULTS_ROOT%" >NUL
-tar.exe -a -cf "%ZIP_FILE%" "%RUN_NAME%"
-set "ZIP_EXIT=%ERRORLEVEL%"
-popd >NUL
-
-if not "%ZIP_EXIT%"=="0" (
-  echo [WARN] tar.exe failed with code %ZIP_EXIT% — runDir preserved at %RUN_DIR%
-  exit /b %ZIP_EXIT%
-)
-
-echo [INFO] Done.
+echo [INFO] Done. Results in %RUN_DIR%
 exit /b 0
 
 :make_timestamp
@@ -222,7 +208,6 @@ echo   --help, -h      Show this help
 echo.
 echo Output:
 echo   results\^<project^>_yyyyMMdd_HHmmss\   runDir (raw.jtl, jmeter.log, effective-config.json, report\, custom\)
-echo   results\^<project^>_yyyyMMdd_HHmmss.zip  archive of runDir (on success)
 echo.
 exit /b 0
 

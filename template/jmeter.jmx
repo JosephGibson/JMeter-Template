@@ -40,7 +40,7 @@
         <collectionProp name="HeaderManager.headers">
           <elementProp name="User-Agent" elementType="Header">
             <stringProp name="Header.name">User-Agent</stringProp>
-            <stringProp name="Header.value">JMeter-Template/1.0</stringProp>
+            <stringProp name="Header.value">JMeter-Template/${TEMPLATE_VERSION}</stringProp>
           </elementProp>
           <elementProp name="Accept" elementType="Header">
             <stringProp name="Header.name">Accept</stringProp>
@@ -92,10 +92,11 @@
         <stringProp name="cacheKey">true</stringProp>
         <stringProp name="filename"></stringProp>
         <stringProp name="parameters"></stringProp>
-        <stringProp name="script">def results = prev?.getAssertionResults()
+        <stringProp name="script">def scenario = vars.get(&quot;CURRENT_SCENARIO&quot;)
+if (!scenario) return
+def results = prev?.getAssertionResults()
 if (!results || results.length == 0) return
 def logger = props.get(&quot;log&quot;)
-def scenario = vars.get(&quot;CURRENT_SCENARIO&quot;) ?: &quot;?&quot;
 def step = prev.getSampleLabel() ?: &quot;?&quot;
 results.each { ar -&gt;
     if (ar.isFailure() || ar.isError()) {
@@ -136,7 +137,7 @@ results.each { ar -&gt;
         <!-- ============================================================
              SU01 Load Config + Banner (plan §4.6, §4.1, §7.1)
              Reads:  -Jprofile, -Jenv, -JprojectName, -Jmode,
-                     -JrunDir, -JresultsRootDir, -Jproxy.host, -Jproxy.port,
+                     -JrunDir, -Jproxy.host, -Jproxy.port,
                      profiles/{profile}.json, environmentVariables.json
              Writes: props[scheme,host,port,mode,projectName,envName,
                            concurrentUsers,rampUpSeconds,holdSeconds,
@@ -263,6 +264,25 @@ if (inGui) {
             try { new FileOutputStream(f, false).close() } catch (Throwable ignored) { /* ignore candidate */ }
         }
     } catch (Throwable t) { /* ignore */ }
+}
+
+// ---------- GUI: drop stale writer.* props from a prior run in same JVM ----------
+if (inGui) {
+    def staleKeys = []
+    props.entrySet().each { e -&gt;
+        def k = e.key
+        if ((k instanceof String) &amp;&amp; k.startsWith(&quot;writer.&quot;)) staleKeys &lt;&lt; k
+    }
+    staleKeys.each { k -&gt;
+        try {
+            def w = props.get(k)
+            if (w != null) {
+                if (w.respondsTo(&quot;flush&quot;)) w.flush()
+                if (w.respondsTo(&quot;close&quot;)) w.close()
+            }
+        } catch (Throwable t) { /* ignore */ }
+        props.remove(k)
+    }
 }
 
 // ---------- install logger into props ----------
@@ -531,7 +551,7 @@ SampleResult.setResponseMessage(&quot;setUp complete&quot;)
       <!-- ============================================================
            tearDown Thread Group (plan §4.4, §8 phase 5)
            GUI-guarded. Closes shared writers stashed under props["writer.*"],
-           emits summary. Report/zip are handled by the launcher.
+           emits summary. HTML report is produced by the launcher's -e -o flag.
            ============================================================ -->
       <PostThreadGroup guiclass="PostThreadGroupGui" testclass="PostThreadGroup" testname="tearDown Thread Group" enabled="true">
         <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
@@ -640,6 +660,7 @@ SampleResult.setResponseMessage(msg)
               <stringProp name="parameters"></stringProp>
               <stringProp name="script">vars.putObject(&quot;iterStart&quot;, System.currentTimeMillis())
 vars.put(&quot;CURRENT_SCENARIO&quot;, &quot;Sc01&quot;)
+vars.put(&quot;DELAY_TIME&quot;, &quot;0&quot;)
 </stringProp>
               <stringProp name="scriptLanguage">groovy</stringProp>
             </JSR223PreProcessor>
@@ -655,12 +676,6 @@ vars.put(&quot;CURRENT_SCENARIO&quot;, &quot;Sc01&quot;)
             </ResponseAssertion>
             <hashTree/>
           </hashTree>
-
-          <!-- think-time gap (between step1 and step2) -->
-          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think Time Sc01 (1/2)" enabled="true">
-            <stringProp name="ConstantTimer.delay">${__groovy(Math.max(0L\, (props.get('thinkTimeBudgetMs') ?: '0').toLong().intdiv(2L)))}</stringProp>
-          </ConstantTimer>
-          <hashTree/>
 
           <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Sc01/step2-search" enabled="true">
             <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
@@ -681,6 +696,13 @@ vars.put(&quot;CURRENT_SCENARIO&quot;, &quot;Sc01&quot;)
             <stringProp name="HTTPSampler.response_timeout"></stringProp>
           </HTTPSamplerProxy>
           <hashTree>
+            <!-- Think time before Sc01/step2. Child of the sampler so the
+                 delay scopes to step2 only (see plan §4.8, Decision #13).
+                 Divisor = (nSamplers - 1); update if the scenario grows. -->
+            <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think Time Sc01 (1/2)" enabled="true">
+              <stringProp name="ConstantTimer.delay">${__groovy(Math.max(0L\, (props.get('thinkTimeBudgetMs') ?: '0').toLong().intdiv(2L)))}</stringProp>
+            </ConstantTimer>
+            <hashTree/>
             <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="status 2xx" enabled="true">
               <collectionProp name="Asserion.test_strings">
                 <stringProp name="a1">2\d\d</stringProp>
@@ -692,12 +714,6 @@ vars.put(&quot;CURRENT_SCENARIO&quot;, &quot;Sc01&quot;)
             </ResponseAssertion>
             <hashTree/>
           </hashTree>
-
-          <!-- think-time gap (between step2 and step3) -->
-          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think Time Sc01 (2/2)" enabled="true">
-            <stringProp name="ConstantTimer.delay">${__groovy(Math.max(0L\, (props.get('thinkTimeBudgetMs') ?: '0').toLong().intdiv(2L)))}</stringProp>
-          </ConstantTimer>
-          <hashTree/>
 
           <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Sc01/step3-confirm" enabled="true">
             <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
@@ -718,6 +734,11 @@ vars.put(&quot;CURRENT_SCENARIO&quot;, &quot;Sc01&quot;)
             <stringProp name="HTTPSampler.response_timeout"></stringProp>
           </HTTPSamplerProxy>
           <hashTree>
+            <!-- Think time before Sc01/step3. Child-scoped; see note on (1/2). -->
+            <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think Time Sc01 (2/2)" enabled="true">
+              <stringProp name="ConstantTimer.delay">${__groovy(Math.max(0L\, (props.get('thinkTimeBudgetMs') ?: '0').toLong().intdiv(2L)))}</stringProp>
+            </ConstantTimer>
+            <hashTree/>
             <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="status 2xx" enabled="true">
               <collectionProp name="Asserion.test_strings">
                 <stringProp name="a1">2\d\d</stringProp>
@@ -800,6 +821,7 @@ if (remaining &lt; 0L) {
               <stringProp name="parameters"></stringProp>
               <stringProp name="script">vars.putObject(&quot;iterStart&quot;, System.currentTimeMillis())
 vars.put(&quot;CURRENT_SCENARIO&quot;, &quot;Sc02&quot;)
+vars.put(&quot;DELAY_TIME&quot;, &quot;0&quot;)
 </stringProp>
               <stringProp name="scriptLanguage">groovy</stringProp>
             </JSR223PreProcessor>
@@ -815,11 +837,6 @@ vars.put(&quot;CURRENT_SCENARIO&quot;, &quot;Sc02&quot;)
             </ResponseAssertion>
             <hashTree/>
           </hashTree>
-
-          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think Time Sc02 (1/2)" enabled="true">
-            <stringProp name="ConstantTimer.delay">${__groovy(Math.max(0L\, (props.get('thinkTimeBudgetMs') ?: '0').toLong().intdiv(2L)))}</stringProp>
-          </ConstantTimer>
-          <hashTree/>
 
           <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Sc02/step2-details" enabled="true">
             <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
@@ -840,6 +857,11 @@ vars.put(&quot;CURRENT_SCENARIO&quot;, &quot;Sc02&quot;)
             <stringProp name="HTTPSampler.response_timeout"></stringProp>
           </HTTPSamplerProxy>
           <hashTree>
+            <!-- Think time before Sc02/step2. Child-scoped; see Sc01 note. -->
+            <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think Time Sc02 (1/2)" enabled="true">
+              <stringProp name="ConstantTimer.delay">${__groovy(Math.max(0L\, (props.get('thinkTimeBudgetMs') ?: '0').toLong().intdiv(2L)))}</stringProp>
+            </ConstantTimer>
+            <hashTree/>
             <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="status 2xx" enabled="true">
               <collectionProp name="Asserion.test_strings">
                 <stringProp name="a1">2\d\d</stringProp>
@@ -851,11 +873,6 @@ vars.put(&quot;CURRENT_SCENARIO&quot;, &quot;Sc02&quot;)
             </ResponseAssertion>
             <hashTree/>
           </hashTree>
-
-          <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think Time Sc02 (2/2)" enabled="true">
-            <stringProp name="ConstantTimer.delay">${__groovy(Math.max(0L\, (props.get('thinkTimeBudgetMs') ?: '0').toLong().intdiv(2L)))}</stringProp>
-          </ConstantTimer>
-          <hashTree/>
 
           <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Sc02/step3-submit" enabled="true">
             <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
@@ -876,6 +893,11 @@ vars.put(&quot;CURRENT_SCENARIO&quot;, &quot;Sc02&quot;)
             <stringProp name="HTTPSampler.response_timeout"></stringProp>
           </HTTPSamplerProxy>
           <hashTree>
+            <!-- Think time before Sc02/step3. Child-scoped; see Sc01 note. -->
+            <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Think Time Sc02 (2/2)" enabled="true">
+              <stringProp name="ConstantTimer.delay">${__groovy(Math.max(0L\, (props.get('thinkTimeBudgetMs') ?: '0').toLong().intdiv(2L)))}</stringProp>
+            </ConstantTimer>
+            <hashTree/>
             <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="status 2xx" enabled="true">
               <collectionProp name="Asserion.test_strings">
                 <stringProp name="a1">2\d\d</stringProp>
@@ -1005,6 +1027,11 @@ synchronized(w) { w.println(line) }
         </hashTree>
 
         <!-- =========== Fragment: Assertion Patterns (plan §4.10, §4.11) =========== -->
+        <!-- Reference palette only. Copy individual child assertions/
+             post-processors under a real sampler; do NOT enable the
+             controller itself — the children have no sampler in scope
+             here, and enabling runs the JSON-path assertion against
+             nothing (guaranteed failure). -->
         <GenericController guiclass="LogicControllerGui" testclass="GenericController" testname="Fragment: Assertion Patterns" enabled="false"/>
         <hashTree>
           <!-- status-only -->
@@ -1055,8 +1082,9 @@ if (v == null || v == &quot;NOT_FOUND&quot; || v.isEmpty()) {
 
         <!-- =========== Example CSV Data Set Config (plan §4.3) =========== -->
         <!-- Disabled by default; enable inside the scenario that consumes it.
-             File: data/Sc01_SomeData.csv. Sharing=All threads, recycle=true,
-             stopThread=false. -->
+             File: data/Sc01_SomeData.csv (path is relative to jmeter.jmx's
+             directory, resolved via FileServer base dir).
+             Sharing=All threads, recycle=true, stopThread=false. -->
         <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="Fragment: CSV Data Set (Sc01_SomeData)" enabled="false">
           <stringProp name="delimiter">,</stringProp>
           <stringProp name="fileEncoding">UTF-8</stringProp>

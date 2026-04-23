@@ -21,7 +21,7 @@ Hard rules (plan §3):
 ```
 {projectName}/
 ├── jmeter.jmx                    # Test plan (one per project)
-├── Test_executor.bat             # Launcher (arg parsing, runDir, JMeter invocation, zip)
+├── Test_executor.bat             # Launcher (arg parsing, runDir, JMeter invocation)
 ├── environmentVariables.json     # dev / staging / prod servers
 ├── data/
 │   └── Sc{NN}_{Purpose}.csv      # Per-scenario CSV inputs
@@ -33,13 +33,12 @@ Hard rules (plan §3):
 │   ├── Breakpoint.json
 │   └── debug.json
 └── results/
-    ├── {project}_{yyyyMMdd_HHmmss}/   # runDir per successful CLI run
-    │   ├── raw.jtl
-    │   ├── jmeter.log
-    │   ├── effective-config.json
-    │   ├── report/index.html
-    │   └── custom/                    # scenario-written files
-    └── {project}_{yyyyMMdd_HHmmss}.zip
+    └── {project}_{yyyyMMdd_HHmmss}/   # runDir per successful CLI run
+        ├── raw.jtl
+        ├── jmeter.log
+        ├── effective-config.json
+        ├── report/index.html
+        └── custom/                    # scenario-written files
 ```
 
 ## 3. Profile schema
@@ -121,6 +120,8 @@ Worked example for `targetSessionsPerHour=120`, `sessionDurationSeconds=600`, `e
 
 The **think time budget** is distributed across Constant Timers between samplers: `budget / (n-1)` for `n` samplers in the scenario (Decision #13). For 3 samplers this is 285 s between each step.
 
+Each Think Timer is attached as a **child** of the sampler it should delay (step 2 onwards). This is deliberate: JMeter runs every in-scope timer before every sibling sampler, so placing timers at the Transaction Controller level would multiply their delay by the sampler count. When you expand a scenario, keep each Think Timer as a child of its "after" sampler and update the `intdiv(N)` divisor to `n-1`.
+
 Actual pacing is enforced **per iteration**, not per sampler — a scenario that overruns its `sessionDurationSeconds` logs a WARN and continues immediately. The mechanism is four-element (plan §4.8):
 
 1. JSR223 **PreProcessor** on first sampler → records `iterStart`.
@@ -148,7 +149,7 @@ Override via `--mode weighted|sequential` (or `-Jmode=...`) without editing the 
    - Paste your cleaned samplers in order.
    - Build out the real flow to 15–25 meaningful HTTP calls; the committed 3-call scaffolds are only placeholders.
    - Keep the PreProcessor on the first sampler and the PostProcessor on the last.
-   - Adjust the Think Time Timer count so there is one between every pair of consecutive samplers.
+   - Place a Think Time Constant Timer as a **child** of each sampler from step 2 onwards (never as a Transaction Controller sibling — see §4), and update each timer's `intdiv(N)` to `N = nSamplers - 1`.
    - Keep the Pacing Anchor + Pacing Timer block at the end.
    - Add a Module Controller under the Weighted Switch Controller pointing at the new Transaction Controller; name it `Sc{NN}` (matching the WSC row name).
    - Add a new row to the Weighted Switch Controller's weights list: `Sc{NN}` → `${__P(Sc{NN}.weight,1)}`.
@@ -156,7 +157,7 @@ Override via `--mode weighted|sequential` (or `-Jmode=...`) without editing the 
 
 ## 7. CSV data conventions (plan §4.3)
 
-- File path: `data/Sc{NN}_{Purpose}.csv`, e.g. `data/Sc01_Users.csv`.
+- File path: `data/Sc{NN}_{Purpose}.csv`, e.g. `data/Sc01_Users.csv`. The path is relative to the `.jmx` directory; JMeter resolves it via its FileServer base dir.
 - Add a **CSV Data Set Config** inside the scenario's Transaction Controller (one per scenario/CSV pair). A disabled template is in the Fragments subtree.
 - Sharing mode: **All threads**.
 - Recycle on EOF: **true**.

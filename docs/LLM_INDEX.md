@@ -23,7 +23,7 @@ File map for LLM navigation. Use this before exploring; do not re-derive structu
 | 4.1 | Load shaping (closed-user model, derived values) |
 | 4.2 | Scenario orchestration (Weighted Switch + Module Controllers) |
 | 4.3 | CSV data handling |
-| 4.4 | Results collection (`runDir`, zip) |
+| 4.4 | Results collection (`runDir`, archiving policy) |
 | 4.5 | `Test_executor.bat` arg surface |
 | 4.6 | Logging module (`props["log"]`) |
 | 4.7 | `.jmx` root-level defaults |
@@ -48,11 +48,11 @@ Reference implementation under [../template/](../template/):
 | Path | Purpose |
 |---|---|
 | [../template/jmeter.jmx](../template/jmeter.jmx) | Root test plan (TestPlan, HTTP Defaults/Header/Cache/Cookie Managers, UDV, Assertion Failure Listener, setUp + Main UTG + tearDown thread groups, Fragments subtree with short Sc01/Sc02 scaffolds) |
-| [../template/Test_executor.bat](../template/Test_executor.bat) | CLI launcher — arg parsing, runDir creation, JMeter invocation, zip-on-success |
+| [../template/Test_executor.bat](../template/Test_executor.bat) | CLI launcher — arg parsing, runDir creation, JMeter invocation |
 | [../template/environmentVariables.json](../template/environmentVariables.json) | Server definitions for `dev` / `staging` / `prod` |
 | [../template/profiles/](../template/profiles/) | Six profile JSON files (Load, Soak, Smoke, Stress, Breakpoint, debug) |
 | [../template/data/Sc01_SomeData.csv](../template/data/Sc01_SomeData.csv) | Example CSV input (sharing=All threads, recycle=true, stopThread=false) |
-| `../template/results/` | Per-run runDir + sibling zip (gitignored) |
+| `../template/results/` | Per-run runDir (gitignored) |
 
 ### .jmx component map
 

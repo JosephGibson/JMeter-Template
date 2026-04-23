@@ -26,15 +26,9 @@ Open `jmeter.jmx` in the JMeter GUI (5.6.3 + Ultimate Thread Group + Weighted Sw
 - Override precedence: profile file is base; `-J` wins.
 - The detected `jmeter.log` candidates are truncated at setUp so each GUI run starts fresh.
 - The banner does **not** print in GUI (only in CLI).
-- GUI runs do not produce `runDir/` and do not produce a zip.
+- GUI runs do not produce `runDir/`.
 
-To run a specific profile in GUI:
-
-```
-Options → Define properties (JMeter has no direct UI; use jmeter.bat with -J)
-```
-
-Or start the GUI with properties:
+To run a specific profile in GUI, start the GUI with `-J` properties on the command line:
 
 ```
 jmeter.bat -Jprofile=Load -Jenv=dev -JprojectName=acme
@@ -75,10 +69,9 @@ The launcher:
 2. Resolves a `yyyyMMdd_HHmmss` timestamp via Java 17, with deprecated `wmic` and common `%DATE%/%TIME%` formats as fallbacks. PowerShell is never used.
 3. Creates `runDir = results/<project>_<yyyyMMdd_HHmmss>/` (fails if it already exists).
 4. Invokes `jmeter.bat -n -t jmeter.jmx -l raw.jtl -j jmeter.log -e -o report -J...`.
-5. On JMeter exit 0, zips `runDir/` to a sibling `.zip` via bundled `tar.exe -a -cf`.
-6. Propagates JMeter's exit code.
+5. Propagates JMeter's exit code.
 
-No run ever overwrites a prior run (plan §7.4). Retry failures always get a fresh timestamp and fresh folder.
+No run ever overwrites a prior run (plan §7.4). Retry failures always get a fresh timestamp and fresh folder. The launcher does not archive `runDir/`; zip manually (Windows Explorer → Send to → Compressed folder) when shipping results.
 
 ## 4. Reading the results folder
 
@@ -93,8 +86,6 @@ results/acme_20260422_153403/
 │   └── sbadmin2-1.0.7/
 └── custom/                   Scenario-written files (if the Log to File fragment was enabled)
 ```
-
-Sibling `results/acme_20260422_153403.zip` — archive of the above, produced on success.
 
 ### What to check first
 
@@ -146,12 +137,12 @@ Note: a single breach is normal noise. **Sustained breaches** (>5 % of iteration
 
 | Exit | Source | Meaning |
 |---|---|---|
-| `0`  | launcher | Full success — JMeter OK, zip OK |
+| `0`  | launcher | Success |
 | `1`  | launcher | Arg parse failure (missing/invalid flag) |
 | `2`  | launcher | Missing file: profile, environmentVariables.json, or jmeter.jmx |
 | `3`  | launcher | Could not compute timestamp |
 | `4`  | launcher | `runDir` already exists (timestamp collision — shouldn't happen) |
-| `<n>` | JMeter  | JMeter's own exit code; zip step is skipped |
+| `<n>` | JMeter  | JMeter's own exit code |
 
 ## 7. Common pitfalls
 

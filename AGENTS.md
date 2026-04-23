@@ -19,7 +19,7 @@ The plan is the source of truth. README/AGENTS/INDEX must not contradict it; if 
 - Dev flow: Record → Build in GUI → Debug in GUI → Execute in CLI.
 - HAR is the primary recording input (BlazeMeter converter).
 - **No PowerShell.** Launcher is `.bat` only.
-- Every sampler must have at least one assertion.
+- Every sampler under the Main Thread Group must have at least one assertion. setUp/tearDown JSR223 samplers are exempt (they set their own `SampleResult.successful`).
 - Listeners disabled by default in `.jmx`; CLI uses `-l` flag.
 - No run ever overwrites a prior run.
 
@@ -27,7 +27,7 @@ The plan is the source of truth. README/AGENTS/INDEX must not contradict it; if 
 
 - Phases (plan §8) are sequential. Do not start phase N+1 until phase N's acceptance check passes.
 - Profile is base config; `-J` properties override.
-- `.bat` launcher is operational only: arg parsing, run-dir creation, JMeter invocation, exit propagation, post-success zip. No business logic.
+- `.bat` launcher is operational only: arg parsing, run-dir creation, JMeter invocation, exit propagation. No business logic.
 - Groovy handles config/load-time logic and logging only.
 - Pacing mechanism is fixed: PreProcessor + PostProcessor + Flow Control Action Pause(0) + child Constant Timer (plan §4.8). Do not substitute alternatives.
 - Closed-user model is the default load shape. An open/arrival-rate model is a separate design that *replaces* §4.1, not mixed into it (plan §10).

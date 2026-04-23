@@ -22,3 +22,14 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 - Changed scenario Transaction Controller parent samples to include timers so scenario timings reflect the full paced session duration.
 - Added a status assertion to the disabled proxy-aware HTTP sampler example so copied HTTP sampler fragments preserve the assertion rule.
 - Clarified documentation that committed Sc01/Sc02 flows are short scaffolds and adapted project scenarios should expand or replace them with 15–25 meaningful HTTP calls.
+- Fixed Think Time scope in both `Sc01` and `Sc02` Transaction Controllers: each Think Timer is now a child of the sampler it should delay (step 2 and step 3), not a TC-level sibling. At TC level, every timer runs before every sibling sampler, so the prior topology multiplied the intended delay by the sampler count and caused unavoidable pacing breaches on every iteration.
+- Narrowed the TestPlan-root `LN01 Assertion Failure Summary` listener to early-return when `CURRENT_SCENARIO` is unset, so setUp/tearDown samples skip the full inspection path.
+- `SU01 Load Config + Banner` now closes and removes any stale `writer.*` entries left in `props` when a prior GUI run stopped before `TD01 Finalize` ran, so the next GUI run starts with a fresh per-scenario writer.
+- Sc01/Sc02 iter-start PreProcessors now seed `vars["DELAY_TIME"]="0"` alongside `iterStart` and `CURRENT_SCENARIO`, so the Pacing Timer never reads a literal `${DELAY_TIME}` if the PostProcessor is skipped.
+- Bound the root `HTTP Header Manager`'s `User-Agent` to `JMeter-Template/${TEMPLATE_VERSION}` so the header stays consistent with the `TEMPLATE_VERSION` User Defined Variable.
+
+### Changed
+- Removed the launcher's `tar.exe` zip step and the accompanying `<run>.zip` sibling output. The host environment doesn't permit `tar.exe`, and the only in-JMeter zip hook (`TD01`) runs before JMeter emits the HTML dashboard, so it can't archive a complete `runDir/`. Plan §4.4 / §4.5 / §7.4, Decision #17, docs, and `--help` output are aligned; users zip `runDir/` manually when shipping results.
+- Dropped the unused `-JresultsRootDir` pass-through from the launcher's JMeter invocation; `-JrunDir` is what the test plan actually reads.
+- Scoped the "every sampler must have an assertion" rule in AGENTS.md and plan §4.11 to the Main Thread Group. `SU01`/`TD01` JSR223 samplers set their own `SampleResult.successful` from script and are exempt.
+- Clarified inline comments on the `Fragment: Assertion Patterns` controller (reference palette only; enabling the controller itself with no sampler in scope guarantees a failure), and on the CSV Data Set fragment (path relative to the `.jmx` directory).

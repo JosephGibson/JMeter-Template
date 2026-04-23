@@ -1,6 +1,6 @@
 # JMeter Template
 
-Reusable JMeter test plan for API and webflow load tests. Profile-driven config, `.bat` launcher, timestamped result archives.
+Reusable JMeter test plan for API and webflow load tests. Profile-driven config, `.bat` launcher, timestamped per-run results folder.
 
 ## Stack
 
@@ -8,7 +8,7 @@ Reusable JMeter test plan for API and webflow load tests. Profile-driven config,
 - Plugins: Ultimate Thread Group, Weighted Switch Controller
 - Scripting: Groovy (JSR223)
 - Launcher: Windows `.bat` (no PowerShell)
-- OS target: Windows 10+ (uses bundled `tar.exe`)
+- OS target: Windows 10+
 
 ## Layout
 
@@ -19,7 +19,7 @@ Reusable JMeter test plan for API and webflow load tests. Profile-driven config,
   environmentVariables.json
   data/         Sc{NN}_{Purpose}.csv
   profiles/     {Load,Soak,Smoke,Stress,Breakpoint,debug}.json
-  results/      {projectName}_{yyyyMMdd_HHmmss}/  + .zip sibling
+  results/      {projectName}_{yyyyMMdd_HHmmss}/
 ```
 
 ## Run
