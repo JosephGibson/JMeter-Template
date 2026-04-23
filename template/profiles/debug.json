@@ -1,14 +1,14 @@
 {
   "profileName": "debug",
-  "description": "GUI development — single user, open-ended",
+  "description": "GUI development — single user, long-running",
   "mode": "sequential",
   "load": {
-    "targetSessionsPerHour": 6,
-    "sessionDurationSeconds": 600,
+    "targetSessionsPerHour": 120,
+    "sessionDurationSeconds": 30,
     "rampUpSeconds": 0,
-    "holdSeconds": 600,
+    "holdSeconds": 86400,
     "rampDownSeconds": 0,
-    "estimatedIterationSeconds": 30
+    "estimatedIterationSeconds": 5
   },
   "scenarios": [
     { "id": "Sc01", "weight": 1 },

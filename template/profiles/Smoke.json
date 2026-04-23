@@ -1,14 +1,14 @@
 {
   "profileName": "Smoke",
-  "description": "Sanity check after changes — single user, one loop",
+  "description": "Sanity check after changes — single user, short run",
   "mode": "sequential",
   "load": {
-    "targetSessionsPerHour": 6,
-    "sessionDurationSeconds": 600,
+    "targetSessionsPerHour": 120,
+    "sessionDurationSeconds": 30,
     "rampUpSeconds": 0,
     "holdSeconds": 60,
     "rampDownSeconds": 0,
-    "estimatedIterationSeconds": 30
+    "estimatedIterationSeconds": 5
   },
   "scenarios": [
     { "id": "Sc01", "weight": 1 },

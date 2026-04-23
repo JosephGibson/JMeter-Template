@@ -5,7 +5,7 @@ Reusable JMeter test plan for API and webflow load tests. Profile-driven config,
 ## Stack
 
 - JMeter 5.6.3, Java 17 LTS
-- Plugins: Ultimate Thread Group, Weighted Switch Controller
+- Plugins: none (stock JMeter only)
 - Scripting: Groovy (JSR223)
 - Launcher: Windows `.bat` (no PowerShell)
 - OS target: Windows 10+

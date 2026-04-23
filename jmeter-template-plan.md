@@ -2,7 +2,7 @@
 
 ## 1. Goal
 
-Reusable JMeter template for API and webflow load tests. Configured via profile files, executed via a thin `.bat` launcher, results auto-collected into a timestamped archive.
+Reusable JMeter template for API and webflow load tests. Configured via profile files, executed via a thin `.bat` launcher, results auto-collected into a timestamped run directory.
 
 ## 2. Tech Stack
 
@@ -13,7 +13,7 @@ Reusable JMeter template for API and webflow load tests. Configured via profile 
 | Java | 17 LTS JDK (recommended baseline; includes `keytool` for HTTPS recording) |
 | Scripting | Groovy (JSR223) |
 | Launcher | `.bat` (thin orchestration: args, run-dir creation, JMeter invocation) |
-| Required plugins | Ultimate Thread Group, Weighted Switch Controller |
+| Required plugins | None (stock JMeter 5.6.3 only) |
 
 ## 3. Constraints
 
@@ -30,23 +30,26 @@ Reusable JMeter template for API and webflow load tests. Configured via profile 
 
 ### 4.1 Load Shaping
 
-- Default model: **closed-user model**. Each JMeter thread represents one user session executing one scenario per iteration.
+- Default model: **closed-user model**. Each JMeter thread loops over the scenario selectors. With scenario percentages summing to 100, the expected rate is one paced scenario execution per thread loop, but stock Throughput Controllers make independent decisions, so an individual loop can execute 0, 1, or multiple scenarios.
 - Tester inputs only: `sessionDurationSeconds`, `targetSessionsPerHour`.
 - Derived at runtime:
   - `concurrentUsers = max(1, ceil(targetSessionsPerHour * sessionDurationSeconds / 3600))`
   - `pacingSeconds = sessionDurationSeconds`
   - `thinkTimeBudgetSeconds = max(sessionDurationSeconds − estimatedIterationSeconds, 0)`
-- Ramp-up / hold / ramp-down via Ultimate Thread Group (single schedule row) using the derived `concurrentUsers`.
+- Ramp-up / hold via stock Thread Group (scheduler enabled) using the derived `concurrentUsers`. Ramp-up = `rampUpSeconds`; scheduler duration = `rampUpSeconds + holdSeconds + rampDownSeconds` because JMeter's stock Thread Group duration is total thread-group lifetime after startup delay.
+- `rampDownSeconds` is applied as an additional at-capacity **tail window** after ramp-up and hold, before the scheduler hard-stops all threads. Stock Thread Group has no gradual ramp-down; keeping the field preserves existing profile schemas and gives an at-capacity buffer for in-flight iterations, but threads end abruptly when the scheduler fires (continue-on-sample-error is set, so open requests fail rather than hang the shutdown).
 - Pacing enforced per iteration (whole scenario), not per sampler.
 - If a true arrival-rate/open model is needed instead of a closed-user model, that is a separate design and should replace this section rather than being mixed into it.
 
 ### 4.2 Scenario Orchestration
 
-- Both distribution modes are implemented with the **Weighted Switch Controller**:
-  - `weighted` → user-defined weights from `scenarios[].weight`.
-  - `sequential` → config loader publishes weight `1` for every enabled scenario; with Random Choice off, the Weighted Switch Controller yields deterministic round-robin selection for equal weights.
+- Scenario selection uses **stock Throughput Controllers** (one per scenario), each in "Percent Executions" mode with its `percentThroughput` bound to `${__P(Sc{NN}.weight)}`.
+- Distribution modes:
+  - `weighted` → `scenarios[].weight` values pass through to the Throughput Controllers as percentages; set them to sum to 100 for a clean distribution.
+  - `sequential` → config loader publishes `100 / N` for every enabled scenario, giving probabilistic equal share. This is **not** the deterministic round-robin the BlazeMeter Weighted Switch Controller plugin used to provide; determinism is a plugin-specific property and does not survive the switch to stock controllers.
+- Each Throughput Controller decides independently per thread-group iteration, so any given iteration may execute 0, 1, or multiple scenarios. Over the test duration, scenario counts converge to the configured percentages. Pacing is per-scenario (§4.8), so individual scenario timings are unaffected by sibling TC decisions.
 - Each scenario is a Transaction Controller with generate-parent-sample enabled and timer duration included in the parent sample, so scenario-level results reflect the full paced session duration.
-- Scenarios defined once inside a disabled **Test Fragment**, referenced from the Weighted Switch Controller via **Module Controllers**. Required: the Weighted Switch Controller only runs the first direct child per iteration, so each scenario must be a single controller, not a flat list of samplers.
+- Scenarios defined once inside a disabled **Test Fragment**, referenced from each Throughput Controller via a **Module Controller**.
 
 ### 4.3 Data Handling
 
@@ -81,6 +84,7 @@ Test_executor.bat --profile <name> --env <name> --project <name>
 ```
 
 - Args translate to `-J` properties plus fixed CLI flags for JMeter output locations.
+- `--proxy-host` and `--proxy-port` must be supplied together when proxying is enabled.
 - Creates `runDir` before invocation.
 - Invokes `jmeter.bat -n -t jmeter.jmx -l "{runDir}/raw.jtl" -j "{runDir}/jmeter.log" -e -o "{runDir}/report" -J<key>=<value>...`.
 - Keeps batch responsibilities operational only: arg parsing, run-dir creation, JMeter invocation, exit-code propagation.
@@ -110,7 +114,7 @@ Test_executor.bat --profile <name> --env <name> --project <name>
 - HTTP Cookie Manager (per-thread cookies)
 - User Defined Variables
 - setUp Thread Group — config loader + banner
-- Main Thread Group — Ultimate Thread Group
+- Main Thread Group — stock Thread Group (scheduler-controlled, continue-on-sample-error)
 - tearDown Thread Group — results finalization
 
 **Listeners** (View Results Tree, Aggregate Report): **disabled** by default in the `.jmx`. Enabled manually in GUI during debugging. CLI runs use the `-l` flag for results output; no listener tree traversal needed. This matches the JMeter best-practice guidance.
@@ -214,14 +218,18 @@ V1 contains servers only. Map-of-maps shape allows per-env additions (auth endpo
 }
 ```
 
-For `mode: "sequential"`, the config loader ignores `scenarios[].weight` and publishes equal runtime weights for all enabled scenarios.
+Semantics:
+
+- `rampDownSeconds` → at-capacity tail window (stock Thread Group has no gradual ramp-down); scheduler duration = `rampUpSeconds + holdSeconds + rampDownSeconds`.
+- `scenarios[].weight` → percent of iterations that should run the scenario (consumed by a per-scenario Throughput Controller). Set weights to sum to 100 for a clean distribution.
+- For `mode: "sequential"`, the config loader ignores `scenarios[].weight` and publishes `100 / N` for every enabled scenario (probabilistic equal share, not deterministic round-robin).
 
 Profile type conventions:
 
 | Profile | Users | Duration | Purpose |
 |---|---|---|---|
-| `Smoke` | 1 | 1 loop | Sanity check after changes |
-| `debug` | 1 | Open-ended | GUI development |
+| `Smoke` | 1 | Short run | Sanity check after changes |
+| `debug` | 1 | Long-running / manual stop | GUI development |
 | `Load` | Nominal | 1h hold | Representative load |
 | `Stress` | Above nominal | 30m–1h | Find degradation point |
 | `Soak` | Nominal | 8h+ | Detect leaks / drift |
@@ -261,7 +269,7 @@ GUI defaults (when `-J` unset): `profile=debug`, `env=dev`, `projectName=debug`.
 ║  Sessions/hour     : 120                                 ║
 ║  Session target (s): 600                                 ║
 ║  Think time budget : 570.0 (est. iter = 30s)             ║
-║  Ramp / Hold / Ramp: 60 / 3600 / 60                      ║
+║  Ramp / Hold / Tail: 60 / 3600 / 60                      ║
 ║  Scenarios         : Sc01 (70%), Sc02 (30%)              ║
 ╚══════════════════════════════════════════════════════════╝
 ```
@@ -326,11 +334,11 @@ Acceptance: happy-path run shows per-iteration pacing within ±100ms of target; 
 
 Deliverables:
 - Sc02 Transaction Controller mirroring Sc01 (in Fragments).
-- Weighted Switch Controller at the top of the Main Thread Group, containing Module Controllers pointing at Sc01 and Sc02.
-- Weights bound to `${__P(Sc01.weight)}`, `${__P(Sc02.weight)}`.
-- `mode=sequential` causes the config loader to publish equal runtime weights for all enabled scenarios.
+- One stock Throughput Controller per scenario as siblings under the Main Thread Group, each wrapping a Module Controller pointing at the scenario's Fragment.
+- Throughput Controllers set to "Percent Executions" mode, `perThread=false`; `percentThroughput` bound to `${__P(Sc01.weight)}`, `${__P(Sc02.weight)}`.
+- `mode=sequential` causes the config loader to publish `100 / N` for every enabled scenario.
 
-Acceptance: 70/30 weighted run over ≥1000 iterations matches expected counts within ±3%; equal-weight (`sequential`) run produces deterministic round-robin order in the `.jtl`.
+Acceptance: 70/30 weighted run over ≥1000 iterations matches expected counts within ±3%; equal-share (`sequential`) run over ≥1000 iterations matches 50/50 within ±3% (probabilistic, not deterministic).
 
 ### Phase 5 — tearDown Pipeline
 
@@ -374,7 +382,7 @@ Acceptance: a new tester configures and runs a test unassisted.
 | # | Decision | Outcome |
 |---|---|---|
 | 1 | Java | 17 LTS (JDK) |
-| 2 | Distribution | Weighted Switch Controller for both modes; equal runtime weights = deterministic round-robin, custom weights = weighted |
+| 2 | Distribution | Sibling stock Throughput Controllers (percent mode) — one per scenario; weights are percentages; `sequential` publishes equal `100/N` share (probabilistic, not deterministic round-robin) |
 | 3 | Destructive data | Deferred to v2 |
 | 4 | Pacing breach | Always honor pacing; if iteration overruns, log WARN and continue immediately |
 | 5 | Listener presence | Disabled by default in `.jmx`; enabled manually in GUI; CLI uses `-l` flag |
@@ -383,7 +391,7 @@ Acceptance: a new tester configures and runs a test unassisted.
 | 8 | Orchestration split | Thin `.bat` launcher for run-dir creation, JMeter invocation, and report output; Groovy for config/load-time logic only |
 | 9 | Scenario reuse | Module Controllers referencing once-defined Transaction Controllers inside a Fragments subtree |
 | 10 | Override precedence | Profile file is base; `-J` properties override |
-| 11 | Ramp control | Ultimate Thread Group plugin |
+| 11 | Ramp control | Stock Thread Group with scheduler enabled; `duration = rampUpSeconds + holdSeconds + rampDownSeconds` because stock Thread Group Duration is total lifetime after startup delay. No gradual ramp-down (rampDown is an at-capacity tail window before a hard stop) |
 | 12 | Scenario reporting | Transaction Controller, generate-parent-sample = true |
 | 13 | Think time distribution | Constant Timer between samplers; total budget = sessionDuration − est. iter time, divided by `(n−1)` |
 | 14 | Assertion failure → friendly log | JSR223 Listener inspecting `AssertionResult[]`, emits one-line summary |
@@ -395,10 +403,11 @@ Acceptance: a new tester configures and runs a test unassisted.
 | 20 | Logging overrides | Profile logging config is the base; `-Jlog.level` / `-Jlog.colors` override; logger writes full contextual lines to both stdout and `jmeter.log` |
 | 21 | Scenario parent timing | Transaction Controller parent samples include timers so scenario samples reflect full paced session duration |
 | 22 | Scenario scaffold size | Committed Sc01/Sc02 are short scaffolds for template mechanics; adapted project scenarios should expand/replace them with 15–25 meaningful HTTP calls |
+| 23 | Drop plugin dependencies | Template uses stock JMeter 5.6.3 only. Ultimate Thread Group replaced by stock Thread Group + scheduler; Weighted Switch Controller replaced by per-scenario Throughput Controllers. Tradeoff: no gradual ramp-down, `sequential` becomes probabilistic equal-share. Driver: users cannot reliably get plugin installs approved in locked-down environments |
 
 ## 10. Open Questions
 
-- Should `targetSessionsPerHour` mean a **closed-model completed-session target** (the model assumed in this plan), or do you actually want a **true arrival-rate model**? If it is the latter, the load-shaping section should switch away from Ultimate Thread Group to an arrivals/open-model design instead of keeping the current math.
+- Should `targetSessionsPerHour` mean a **closed-model completed-session target** (the model assumed in this plan), or do you actually want a **true arrival-rate model**? If it is the latter, the load-shaping section should switch away from stock Thread Group + scheduler to an arrivals/open-model design (stock Concurrency Thread Group is also a plugin, so a true open model likely needs a plugin exemption) instead of keeping the current math.
 
 ## 11. References
 
@@ -416,12 +425,6 @@ Acceptance: a new tester configures and runs a test unassisted.
 - [Glossary](https://jmeter.apache.org/usermanual/glossary.html)
 - [ReportGenerator API Javadoc](https://jmeter.apache.org/api/org/apache/jmeter/report/dashboard/ReportGenerator.html)
 
-### Plugins
-
-- [JMeter Plugins Index](https://jmeter-plugins.org/)
-- [Weighted Switch Controller — BlazeMeter plugin docs](https://github.com/Blazemeter/jmeter-bzm-plugins/blob/master/wsc/WeightedSwitchController.md)
-- [Ultimate Thread Group — plugin docs](https://jmeter-plugins.org/wiki/UltimateThreadGroup/)
-
 ### Tooling
 
 - [BlazeMeter JMX Converter (HAR → JMX)](https://converter.blazemeter.com/)
@@ -429,6 +432,5 @@ Acceptance: a new tester configures and runs a test unassisted.
 
 ### Background reading
 
-- [BlazeMeter — Weighted Switch Controller deep-dive](https://www.blazemeter.com/blog/weighted-switch-controller-jmeter) — explains deterministic (non-probabilistic) selection
 - [BlazeMeter — JMeter Non-GUI Mode tips](https://www.blazemeter.com/blog/jmeter-non-gui-mode) — best practice context for the `-l` flag and listener avoidance
 - [Community pattern — iteration pacing via Flow Control Action](https://automationsolutions.org/2021/10/28/implementing-iteration-pacing-in-jmeter/) — the pattern adopted in §4.8

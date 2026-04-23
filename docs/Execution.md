@@ -10,7 +10,7 @@ The template is designed around a single loop:
 2. **Build** in the JMeter GUI:
    - Convert HAR → JMX via [BlazeMeter](https://converter.blazemeter.com/).
    - Copy cleaned samplers into `Sc{NN}` inside the Fragments subtree (see [Usage § 6 / § 8](Usage.md)).
-   - Wire a Module Controller + Weighted Switch Controller row as described in Usage § 6.
+   - Wire a per-scenario Throughput Controller + Module Controller under the Main Thread Group as described in Usage § 6.
 3. **Debug** in the JMeter GUI:
    - Open `jmeter.jmx`; no `-J` props ⇒ `profile=debug`, `env=dev`, `projectName=debug` are auto-applied.
    - Temporarily enable `View Results Tree` and/or `Aggregate Report` for visibility. **Disable them before CLI runs** (plan §4.7).
@@ -19,7 +19,7 @@ The template is designed around a single loop:
 
 ## 2. GUI runs
 
-Open `jmeter.jmx` in the JMeter GUI (5.6.3 + Ultimate Thread Group + Weighted Switch Controller plugins).
+Open `jmeter.jmx` in the JMeter GUI (5.6.3, stock — no plugins required).
 
 - **Defaults when no `-J` props are set**: `profile=debug`, `env=dev`, `projectName=debug`.
 - `-J` properties always override profile values (Decision #10).
@@ -105,8 +105,8 @@ Fields are the union of the profile, environment, resolved mode, derived values,
   "mode": "weighted",
   "environment": { "name": "dev", "scheme": "https", "host": "dev.example.com", "port": 443 },
   "load": { "targetSessionsPerHour": 120, "sessionDurationSeconds": 600, "rampUpSeconds": 60, "holdSeconds": 3600, "rampDownSeconds": 60, "estimatedIterationSeconds": 30 },
-  "derived": { "concurrentUsers": 20, "pacingSeconds": 600.0, "thinkTimeBudgetSeconds": 570.0 },
-  "scenarios": [ { "id": "Sc01", "weight": 70 }, { "id": "Sc02", "weight": 30 } ],
+  "derived": { "concurrentUsers": 20, "durationSeconds": 3720, "pacingSeconds": 600.0, "thinkTimeBudgetSeconds": 570.0 },
+  "scenarios": [ { "id": "Sc01", "weight": 70.0 }, { "id": "Sc02", "weight": 30.0 } ],
   "logging": { "level": "INFO", "colors": true },
   "proxy": { "host": null, "port": null }
 }
@@ -149,5 +149,5 @@ Note: a single breach is normal noise. **Sustained breaches** (>5 % of iteration
 - **Forgetting `-n`** — all CLI use runs through `Test_executor.bat`, which supplies `-n`. Do not invoke `jmeter.bat` directly unless you know why.
 - **Running with listeners enabled** — kills throughput. Disable `View Results Tree` / `Aggregate Report` before CLI runs; they are disabled in the committed `.jmx` by default.
 - **Checking `report/` before the run finishes** — JMeter generates the HTML dashboard after the run ends. During the run, only `raw.jtl` and `jmeter.log` are live.
-- **Assuming sequential mode means one-at-a-time** — `sequential` is *scenario selection order*, not user concurrency. You still run `concurrentUsers` threads; they just rotate through scenarios deterministically.
+- **Assuming sequential mode means one-at-a-time** — `sequential` controls scenario-selection *share*, not user concurrency. You still run `concurrentUsers` threads; each thread's per-iteration scenario is chosen probabilistically with equal weights (each scenario = `100 / N` percent). Over a long run, counts converge to equal share, but any given iteration can include 0, 1, or multiple scenarios.
 - **Changing `sessionDurationSeconds` without changing `targetSessionsPerHour`** — both feed `concurrentUsers`, so changing one changes user count. Adjust deliberately.

@@ -47,6 +47,14 @@ if not "%MODE%"=="" (
     goto usage_err
   )
 )
+if "%PROXY_HOST%"=="" if not "%PROXY_PORT%"=="" (
+  echo [FATAL] --proxy-port requires --proxy-host.
+  goto usage_err
+)
+if not "%PROXY_HOST%"=="" if "%PROXY_PORT%"=="" (
+  echo [FATAL] --proxy-host requires --proxy-port.
+  goto usage_err
+)
 
 rem --- Resolve profile file path (used for an early existence check) ---
 set "PROFILE_FILE=%SCRIPT_DIR%\profiles\%PROFILE%.json"
@@ -201,8 +209,8 @@ echo   --project       Project name; used in results folder name
 echo.
 echo Optional:
 echo   --mode          Override profile's mode (weighted^|sequential)
-echo   --proxy-host    HTTP proxy host
-echo   --proxy-port    HTTP proxy port
+echo   --proxy-host    HTTP proxy host (must be paired with --proxy-port)
+echo   --proxy-port    HTTP proxy port (must be paired with --proxy-host)
 echo   --results-root  Override default .\results
 echo   --help, -h      Show this help
 echo.

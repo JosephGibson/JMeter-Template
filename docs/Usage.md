@@ -12,7 +12,7 @@ Hard rules (plan §3):
 - No code duplication across scenarios — share via Test Fragments + Module Controllers.
 - Scenario IDs: `Sc01`, `Sc02`, ... (zero-padded, two digits).
 - Adapted project scenarios should contain 15–25 meaningful HTTP calls; the committed Sc01/Sc02 flows are short scaffolds for template mechanics.
-- Every sampler has at least one assertion.
+- Every sampler under the Main Thread Group has at least one assertion.
 - Listeners disabled in the `.jmx`; CLI writes JTL via `-l`.
 - No run ever overwrites a prior run.
 
@@ -78,23 +78,23 @@ Field reference:
 | `mode` | `weighted` or `sequential`; overridable via `--mode` |
 | `load.targetSessionsPerHour` | Tester-facing throughput target (completed sessions / hour) |
 | `load.sessionDurationSeconds` | One iteration's target wall-clock time = pacing interval |
-| `load.rampUpSeconds` | Startup window for Ultimate Thread Group |
+| `load.rampUpSeconds` | Thread Group ramp-up period |
 | `load.holdSeconds` | Hold window at full concurrency |
-| `load.rampDownSeconds` | Shutdown window |
+| `load.rampDownSeconds` | At-capacity tail window before the scheduler hard-stops threads. Stock Thread Group has no gradual ramp-down — this buffer extends the total scheduler duration after ramp-up and hold. |
 | `load.estimatedIterationSeconds` | Rough time all samplers consume; feeds the think-time budget |
 | `scenarios[].id` | Scenario ID, must match a Transaction Controller in the Fragments subtree |
-| `scenarios[].weight` | Used only when `mode: "weighted"`; must be `> 0` |
+| `scenarios[].weight` | Percent of iterations that should run the scenario (consumed by a per-scenario Throughput Controller). Set weights to sum to 100 for clean distribution. Required in `mode: "weighted"`. |
 | `logging.level` | `INFO` / `WARN` / `ERROR`; `-Jlog.level` overrides |
 | `logging.colors` | Force ANSI colors; `-Jlog.colors` overrides |
 
-In `sequential` mode the loader ignores `weight` and publishes `1` for every scenario, which makes the Weighted Switch Controller deterministic round-robin (plan §4.2).
+In `sequential` mode the loader ignores `weight` and publishes `100 / N` for every scenario, giving probabilistic equal share across the Throughput Controllers (plan §4.2). This is **not** deterministic round-robin — that was a BlazeMeter Weighted Switch Controller feature and does not exist in stock JMeter.
 
 ### Annotated profile types
 
 | Profile | Typical shape | Purpose |
 |---|---|---|
-| `Smoke` | 1 user, 1 loop | Sanity check after changes. Short hold, no ramp. |
-| `debug` | 1 user, open-ended | GUI development; auto-loaded when `-Jprofile` is unset. |
+| `Smoke` | 1 user, short run | Sanity check after changes. Short hold, no ramp. |
+| `debug` | 1 user, long-running / manual stop | GUI development; auto-loaded when `-Jprofile` is unset. |
 | `Load` | Nominal throughput, 1h hold | Representative production load. |
 | `Stress` | Above nominal, 30m–1h | Find the degradation point. |
 | `Soak` | Nominal, 8h+ | Detect leaks / drift. |
@@ -102,7 +102,7 @@ In `sequential` mode the loader ignores `weight` and publishes `1` for every sce
 
 ## 4. Pacing math (closed-user model, plan §4.1)
 
-A JMeter **thread is one user session**. Each iteration of the thread runs **one scenario**.
+A JMeter **thread is one user session**. Each thread loops over the scenario selectors; when scenario percentages sum to 100, the expected rate is one paced scenario execution per thread loop, though any individual loop can execute 0, 1, or multiple scenarios because stock Throughput Controllers make independent decisions.
 
 Derived at runtime from the profile's `load.*` inputs:
 
@@ -110,6 +110,7 @@ Derived at runtime from the profile's `load.*` inputs:
 concurrentUsers        = max(1, ceil(targetSessionsPerHour * sessionDurationSeconds / 3600))
 pacingSeconds          = sessionDurationSeconds
 thinkTimeBudgetSeconds = max(sessionDurationSeconds - estimatedIterationSeconds, 0)
+durationSeconds        = rampUpSeconds + holdSeconds + rampDownSeconds
 ```
 
 Worked example for `targetSessionsPerHour=120`, `sessionDurationSeconds=600`, `estimatedIterationSeconds=30`:
@@ -117,6 +118,7 @@ Worked example for `targetSessionsPerHour=120`, `sessionDurationSeconds=600`, `e
 - `concurrentUsers = ceil(120 * 600 / 3600) = ceil(20) = 20`
 - `pacingSeconds = 600`
 - `thinkTimeBudgetSeconds = max(600 - 30, 0) = 570`
+- `durationSeconds = 60 + 3600 + 60 = 3720`
 
 The **think time budget** is distributed across Constant Timers between samplers: `budget / (n-1)` for `n` samplers in the scenario (Decision #13). For 3 samplers this is 285 s between each step.
 
@@ -133,8 +135,12 @@ The scenario Transaction Controller is configured to generate a parent sample an
 
 ## 5. Distribution modes
 
-- **`weighted`**: each scenario's `weight` is used as its share (e.g. 70/30 → 70% Sc01, 30% Sc02 over many iterations).
-- **`sequential`**: scenarios run deterministic round-robin (equal runtime weights fed into the Weighted Switch Controller with Random Choice off).
+Scenario selection is implemented with one stock **Throughput Controller per scenario** (Percent Executions mode), each wrapping a Module Controller that points at the scenario's Transaction Controller in the Fragments subtree.
+
+- **`weighted`**: each scenario's `weight` is used as the Throughput Controller's percent (e.g. 70/30 → Sc01 runs on ~70% of iterations, Sc02 on ~30%). Set weights to sum to 100 for a clean distribution.
+- **`sequential`**: the loader publishes `100 / N` as each scenario's runtime weight. Over many iterations, each scenario runs on ~`1/N` of iterations, but selection is probabilistic, not a deterministic round-robin.
+
+Each Throughput Controller decides independently per thread-group iteration. Over a long run the counts converge to the configured percentages, but any given iteration may run 0, 1, or multiple scenarios. Pacing is enforced per scenario (§4), so each scenario's timing is unaffected.
 
 Override via `--mode weighted|sequential` (or `-Jmode=...`) without editing the profile.
 
@@ -151,9 +157,9 @@ Override via `--mode weighted|sequential` (or `-Jmode=...`) without editing the 
    - Keep the PreProcessor on the first sampler and the PostProcessor on the last.
    - Place a Think Time Constant Timer as a **child** of each sampler from step 2 onwards (never as a Transaction Controller sibling — see §4), and update each timer's `intdiv(N)` to `N = nSamplers - 1`.
    - Keep the Pacing Anchor + Pacing Timer block at the end.
-   - Add a Module Controller under the Weighted Switch Controller pointing at the new Transaction Controller; name it `Sc{NN}` (matching the WSC row name).
-   - Add a new row to the Weighted Switch Controller's weights list: `Sc{NN}` → `${__P(Sc{NN}.weight,1)}`.
-6. Add `scenarios[].id = Sc{NN}` to every profile you want it to run in. Give it a `weight` > 0 for weighted profiles.
+   - Under the Main Thread Group, duplicate the `Sc01 Selector` Throughput Controller and rename it `Sc{NN} Selector`; set its `Percent Executions` value to `${__P(Sc{NN}.weight)}`.
+   - Inside the new Throughput Controller, add a Module Controller named `Sc{NN}` pointing at the new Transaction Controller.
+6. Add `scenarios[].id = Sc{NN}` to every profile you want it to run in. Give it a `weight` > 0 for weighted profiles, and adjust the other scenarios' weights so they still sum to 100.
 
 ## 7. CSV data conventions (plan §4.3)
 

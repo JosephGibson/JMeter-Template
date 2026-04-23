@@ -141,7 +141,8 @@ results.each { ar -&gt;
                      profiles/{profile}.json, environmentVariables.json
              Writes: props[scheme,host,port,mode,projectName,envName,
                            concurrentUsers,rampUpSeconds,holdSeconds,
-                           rampDownSeconds,pacingMs,thinkTimeBudgetMs,
+                           rampDownSeconds,durationSeconds,
+                           pacingMs,thinkTimeBudgetMs,
                            estimatedIterationSec, {ScID}.weight...,
                            log.level, log.colors, log (logging module)]
                      {runDir}/effective-config.json (CLI only)
@@ -396,20 +397,34 @@ props.put(&quot;concurrentUsers&quot;,      concurrentUsers.toString())
 props.put(&quot;rampUpSeconds&quot;,        profile.load.rampUpSeconds.toString())
 props.put(&quot;holdSeconds&quot;,          profile.load.holdSeconds.toString())
 props.put(&quot;rampDownSeconds&quot;,      profile.load.rampDownSeconds.toString())
+// Stock Thread Group scheduler Duration is total thread-group lifetime after
+// startup delay, so include ramp-up to preserve the requested hold + tail.
+// rampDownSeconds is an at-capacity tail window; stock Thread Group has no
+// gradual step-down. Hard stop at rampUp + hold + rampDown.
+def durationSec = (profile.load.rampUpSeconds as long) + (profile.load.holdSeconds as long) + (profile.load.rampDownSeconds as long)
+props.put(&quot;durationSeconds&quot;,      durationSec.toString())
 props.put(&quot;pacingMs&quot;,             ((long)(pacingSec * 1000.0d)).toString())
 props.put(&quot;thinkTimeBudgetMs&quot;,    ((long)(thinkBudgetSec * 1000.0d)).toString())
 props.put(&quot;estimatedIterationSec&quot;, estIt.toString())
 
-// ---------- scenario weights ----------
+// ---------- scenario weights (percent, consumed by Throughput Controllers) ----------
+// Weights are interpreted as Percent Executions values by the per-scenario
+// Throughput Controllers. In weighted mode, profile weights pass through (set
+// them to sum to 100 for a clean distribution). In sequential mode, every
+// enabled scenario receives an equal share (100/N). Note: this is probabilistic
+// equal-share, not the deterministic round-robin the plugin WSC provided.
 def runtimeWeights = [:]
+def scenarioCount = profile.scenarios.size()
 profile.scenarios.each { sc -&gt;
     def id = sc.id?.toString()
     if (!id) fatal(&quot;scenarios[] entry missing 'id'&quot;)
     def w
     if (mode == &quot;sequential&quot;) {
-        w = 1
+        w = 100.0d / scenarioCount
     } else {
-        w = (sc.weight as Integer) ?: 0
+        def rawWeight = sc.weight
+        if (rawWeight == null) fatal(&quot;scenarios[&quot; + id + &quot;].weight required in weighted mode&quot;)
+        w = (rawWeight as Number).doubleValue()
         if (w &lt;= 0) fatal(&quot;scenarios[&quot; + id + &quot;].weight must be &gt; 0 in weighted mode&quot;)
     }
     props.put(id + &quot;.weight&quot;, w.toString())
@@ -436,6 +451,7 @@ if (!inGui &amp;&amp; runDir) {
         ],
         derived: [
             concurrentUsers: concurrentUsers,
+            durationSeconds: durationSec,
             pacingSeconds: pacingSec,
             thinkTimeBudgetSeconds: thinkBudgetSec
         ],
@@ -448,9 +464,10 @@ if (!inGui &amp;&amp; runDir) {
 
 // ---------- banner (CLI only) ----------
 if (!inGui) {
+    def fmtPercent = { v -&gt; (v == (long) v) ? ((long) v).toString() : v.toString() }
     def scenDesc = profile.scenarios.collect {
-        def w = runtimeWeights[it.id]
-        (mode == &quot;weighted&quot;) ? (it.id + &quot; (&quot; + w + &quot;%)&quot;) : (it.id + &quot; (&quot; + w + &quot;)&quot;)
+        def w = runtimeWeights[it.id] as double
+        it.id + &quot; (&quot; + fmtPercent(w) + &quot;%)&quot;
     }.join(&quot;, &quot;)
     def envStr = env.scheme + &quot;://&quot; + env.host + &quot;:&quot; + env.port
     def kvs = [
@@ -462,7 +479,7 @@ if (!inGui) {
         &quot;Sessions/hour&quot;     : profile.load.targetSessionsPerHour,
         &quot;Session target (s)&quot;: profile.load.sessionDurationSeconds,
         &quot;Think time budget&quot; : thinkBudgetSec + &quot; (est. iter = &quot; + (estIt as int) + &quot;s)&quot;,
-        &quot;Ramp / Hold / Ramp&quot;: profile.load.rampUpSeconds + &quot; / &quot; + profile.load.holdSeconds + &quot; / &quot; + profile.load.rampDownSeconds,
+        &quot;Ramp / Hold / Tail&quot;: profile.load.rampUpSeconds + &quot; / &quot; + profile.load.holdSeconds + &quot; / &quot; + profile.load.rampDownSeconds,
         &quot;Scenarios&quot;         : scenDesc
     ]
     logger.banner(&quot;JMeter Run Configuration&quot;, kvs)
@@ -478,49 +495,57 @@ SampleResult.setResponseMessage(&quot;setUp complete&quot;)
       </hashTree>
 
       <!-- ============================================================
-           Main Thread Group — Ultimate Thread Group (plan §4.1)
-           Schedule: start=concurrentUsers, delay=0, rampUp, hold, rampDown.
+           Main Thread Group — stock Thread Group with scheduler (plan §4.1)
+           num_threads=concurrentUsers, ramp_time=rampUpSeconds,
+           duration=durationSeconds (rampUpSeconds + holdSeconds +
+           rampDownSeconds — tail at full concurrency; stock Thread Group has
+           no native ramp-down, so rampDownSeconds is applied as an additional
+           hold window before the scheduler hard-stops all threads).
            ============================================================ -->
-      <kg.apc.jmeter.threads.UltimateThreadGroup guiclass="kg.apc.jmeter.threads.UltimateThreadGroupGui" testclass="kg.apc.jmeter.threads.UltimateThreadGroup" testname="Main Thread Group (UTG)" enabled="true">
-        <collectionProp name="ultimatethreadgroupdata">
-          <collectionProp name="row-1">
-            <stringProp name="utg.threads">${__P(concurrentUsers,1)}</stringProp>
-            <stringProp name="utg.initialDelay">0</stringProp>
-            <stringProp name="utg.startupTime">${__P(rampUpSeconds,60)}</stringProp>
-            <stringProp name="utg.holdLoad">${__P(holdSeconds,60)}</stringProp>
-            <stringProp name="utg.shutdownTime">${__P(rampDownSeconds,60)}</stringProp>
-          </collectionProp>
-        </collectionProp>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Main Thread Group" enabled="true">
+        <stringProp name="ThreadGroup.num_threads">${__P(concurrentUsers,1)}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${__P(rampUpSeconds,60)}</stringProp>
+        <boolProp name="ThreadGroup.scheduler">true</boolProp>
+        <stringProp name="ThreadGroup.duration">${__P(durationSeconds,3720)}</stringProp>
+        <stringProp name="ThreadGroup.delay">0</stringProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
         <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
           <boolProp name="LoopController.continue_forever">false</boolProp>
           <intProp name="LoopController.loops">-1</intProp>
         </elementProp>
         <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
-        <stringProp name="Hostname"></stringProp>
-        <stringProp name="Unit">S</stringProp>
-      </kg.apc.jmeter.threads.UltimateThreadGroup>
+      </ThreadGroup>
       <hashTree>
 
         <!-- ============================================================
-             Weighted Switch Controller (plan §4.2)
-             First direct child per iteration, so scenarios reference via
-             Module Controller; weights bound to -Jprops so sequential mode
-             (equal weights) yields deterministic round-robin.
+             Scenario selectors — sibling Throughput Controllers (plan §4.2)
+             One Throughput Controller per scenario, "Percent Executions"
+             mode, percentage bound to ${__P(Sc{NN}.weight)} (published by
+             SU01 as a numeric percent value). Each TC wraps a Module
+             Controller pointing at the scenario's Transaction Controller
+             in the Fragments subtree.
+
+             Behavior:
+             - weighted mode: profile weights are used as percentages
+               directly; set them to sum to 100 for clean distribution.
+             - sequential mode: SU01 publishes equal percentages (100/N)
+               for all enabled scenarios. Selection is probabilistic
+               equal-share — NOT deterministic round-robin (that was a
+               plugin-specific property of the BlazeMeter Weighted Switch
+               Controller and does not survive the switch to stock
+               controllers).
+             - Each TC decides independently per thread-group iteration,
+               so any given iteration can run 0, 1, or multiple scenarios.
+               Over the test duration, scenario counts converge to the
+               configured percentages. Pacing is per-scenario, so individual
+               scenario timings are unaffected.
              ============================================================ -->
-        <com.blazemeter.jmeter.controller.WeightedSwitchController guiclass="com.blazemeter.jmeter.controller.WeightedSwitchControllerGui" testclass="com.blazemeter.jmeter.controller.WeightedSwitchController" testname="Scenario Selector (Weighted Switch)" enabled="true">
-          <boolProp name="dont_count_on_zero_weights">false</boolProp>
-          <collectionProp name="Weights">
-            <collectionProp name="row-Sc01">
-              <stringProp name="name">Sc01</stringProp>
-              <stringProp name="weight">${__P(Sc01.weight,1)}</stringProp>
-            </collectionProp>
-            <collectionProp name="row-Sc02">
-              <stringProp name="name">Sc02</stringProp>
-              <stringProp name="weight">${__P(Sc02.weight,1)}</stringProp>
-            </collectionProp>
-          </collectionProp>
-          <boolProp name="is_random_choice">false</boolProp>
-        </com.blazemeter.jmeter.controller.WeightedSwitchController>
+        <ThroughputController guiclass="ThroughputControllerGui" testclass="ThroughputController" testname="Sc01 Selector" enabled="true">
+          <intProp name="ThroughputController.style">1</intProp>
+          <boolProp name="ThroughputController.perThread">false</boolProp>
+          <intProp name="ThroughputController.maxThroughput">1</intProp>
+          <stringProp name="ThroughputController.percentThroughput">${__P(Sc01.weight)}</stringProp>
+        </ThroughputController>
         <hashTree>
           <ModuleController guiclass="ModuleControllerGui" testclass="ModuleController" testname="Sc01" enabled="true">
             <collectionProp name="ModuleController.node_path">
@@ -533,6 +558,14 @@ SampleResult.setResponseMessage(&quot;setUp complete&quot;)
             </collectionProp>
           </ModuleController>
           <hashTree/>
+        </hashTree>
+        <ThroughputController guiclass="ThroughputControllerGui" testclass="ThroughputController" testname="Sc02 Selector" enabled="true">
+          <intProp name="ThroughputController.style">1</intProp>
+          <boolProp name="ThroughputController.perThread">false</boolProp>
+          <intProp name="ThroughputController.maxThroughput">1</intProp>
+          <stringProp name="ThroughputController.percentThroughput">${__P(Sc02.weight)}</stringProp>
+        </ThroughputController>
+        <hashTree>
           <ModuleController guiclass="ModuleControllerGui" testclass="ModuleController" testname="Sc02" enabled="true">
             <collectionProp name="ModuleController.node_path">
               <stringProp name="np-1">JMeter Template</stringProp>
